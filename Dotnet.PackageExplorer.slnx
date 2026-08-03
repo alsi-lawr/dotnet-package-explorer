@@ -1,0 +1,19 @@
+<Solution>
+    <Folder Name="/Solution Items/">
+        <File Path=".editorconfig" />
+        <File Path="CONTRIBUTING.md" />
+        <File Path="Directory.Build.props" />
+        <File Path="Directory.Packages.props" />
+        <File Path="flake.lock" />
+        <File Path="flake.nix" />
+        <File Path="global.json" />
+    </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/Application/Dotnet.PackageExplorer.Application.fsproj" />
+        <Project Path="src/RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj" />
+        <Project Path="src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj" />
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/unit/Foundation/Dotnet.PackageExplorer.Foundation.UnitTests.fsproj" />
+    </Folder>
+</Solution>

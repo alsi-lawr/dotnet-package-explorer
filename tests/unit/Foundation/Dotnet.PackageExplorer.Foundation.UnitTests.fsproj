@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <OutputType>Exe</OutputType>
+        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+        <AssemblyName>Dotnet.PackageExplorer.Foundation.UnitTests</AssemblyName>
+        <RootNamespace>Dotnet.PackageExplorer.Foundation.UnitTests</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="RepositoryFoundationTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../../src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="FsUnit.Xunit" />
+        <PackageReference Include="xunit.v3" />
+    </ItemGroup>
+</Project>

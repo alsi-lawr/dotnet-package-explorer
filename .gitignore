@@ -1,0 +1,9 @@
+**/*:Zone.Identifier
+**/[Bb]in/
+**/[Oo]bj/
+.agent-workspace/
+.direnv/
+.idea/
+.vs/
+*.DotSettings.user
+result

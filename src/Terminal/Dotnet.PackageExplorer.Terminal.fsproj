@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Dotnet.PackageExplorer.Terminal</AssemblyName>
+        <RootNamespace>Dotnet.PackageExplorer.Terminal</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../Application/Dotnet.PackageExplorer.Application.fsproj" />
+        <ProjectReference Include="../RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj" />
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>
