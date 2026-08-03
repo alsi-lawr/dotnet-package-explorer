@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <OutputType>Exe</OutputType>
+        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+        <AssemblyName>Dotnet.PackageExplorer.Application.UnitTests</AssemblyName>
+        <RootNamespace>Dotnet.PackageExplorer.Application.UnitTests</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="TestData.fs" />
+        <Compile Include="NavigationAndSortingTests.fs" />
+        <Compile Include="AsynchronousUpdateTests.fs" />
+        <Compile Include="OperationsAndFailuresTests.fs" />
+        <Compile Include="ClientPortTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference
+            Include="../../../src/Application/Dotnet.PackageExplorer.Application.fsproj"
+        />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="FsUnit.Xunit" />
+        <PackageReference Include="xunit.v3" />
+    </ItemGroup>
+</Project>

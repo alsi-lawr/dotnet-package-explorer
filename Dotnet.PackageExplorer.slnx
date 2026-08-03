@@ -14,6 +14,9 @@
         <Project Path="src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj" />
     </Folder>
     <Folder Name="/tests/">
+        <Project
+            Path="tests/unit/Application/Dotnet.PackageExplorer.Application.UnitTests.fsproj"
+        />
         <Project Path="tests/unit/Foundation/Dotnet.PackageExplorer.Foundation.UnitTests.fsproj" />
     </Folder>
 </Solution>
