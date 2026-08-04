@@ -141,6 +141,24 @@ type AnsiDriverTests() =
     let renderTextWithKeys width height initial keys =
         renderWithKeys width height initial keys |> String.concat Environment.NewLine
 
+    let renderTextAfter width height initial keys states =
+        use application = Application.Create().Init "ansi"
+
+        application.Driver
+        |> Option.ofObj
+        |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
+
+        application.StopAfterFirstIteration <- true
+        use window = new ExplorerWindow(initial, ignore, application.RequestStop, Ansi16)
+        use _keyboard = window.BindKeyboard application.Keyboard
+
+        keys
+        |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
+
+        states |> List.iter window.Render
+        application.Run window |> ignore
+        Driver.text application.Driver
+
     let render width initial = renderTextWithKeys width 35 initial []
 
     let contextViewport width height initial scrollRows =
@@ -692,7 +710,7 @@ type AnsiDriverTests() =
                 verify width height initial "Tab/1-4 modes | Esc cancel | ? Help" notice))
 
     [<Fact>]
-    member _.``wide and compact operation states keep lifecycle actions and failures visible``() =
+    member _.``wide and compact operation surfaces retain their complete lifecycle content``() =
         let progress =
             { Preview = preview.Id
               Operation = OperationId "operation-1"
@@ -705,19 +723,88 @@ type AnsiDriverTests() =
               Kind = BackendUnavailable
               Message = "Workspace Explorer is unavailable. Check the installed tool." }
 
+        let operationFailure =
+            { Scope = OperationFailure(Some preview.Id)
+              Kind = Rejected "The requested operation was rejected."
+              Message = "The approved package operation could not be completed." }
+
+        let confirmationPreview =
+            { preview with
+                Summary =
+                    [ "Update Direct.Package from 1.0.0 to 2.0.0."
+                      "Update Central.Package from 1.0.0 to 2.0.0."
+                      "Restore two affected projects."
+                      "No known vulnerabilities remain after the update." ] }
+
+        let confirmationSummary = confirmationPreview.Summary
+
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
             let confirmation =
                 { model () with
-                    Route = Content(OperationPreview(preview, Summary)) }
+                    Route = Content(OperationPreview(confirmationPreview, Summary)) }
 
             let confirmationScreen =
                 renderTextWithKeys width height confirmation [ Key.L.WithCtrl; Key.Enter ]
 
             confirmationScreen.Contains("Apply package changes?") |> should equal true
+            confirmationScreen.Contains("Impact summary") |> should equal true
+
+            confirmationSummary
+            |> List.iter (fun summary -> confirmationScreen.Contains(summary) |> should equal true)
+
             confirmationScreen.Contains("[Enter] Apply") |> should equal true
             confirmationScreen.Contains("[Esc] Cancel") |> should equal true
             confirmationScreen.Contains("[?] Help") |> should equal true
+            confirmationScreen.Contains("Search and filters") |> should equal false
+
+            let cancelled =
+                renderTextWithKeys width height confirmation [ Key.L.WithCtrl; Key.Enter; Key.Esc ]
+
+            cancelled.Contains("Apply package changes?") |> should equal false
+
+            cancelled.Contains(confirmationSummary.Head) |> should equal true
+
+            cancelled.Contains("Search and filters") |> should equal true
+
+            let accepted =
+                renderTextWithKeys
+                    width
+                    height
+                    confirmation
+                    [ Key.L.WithCtrl; Key.Enter; Key.Enter ]
+
+            accepted.Contains("Apply package changes?") |> should equal false
+
+            accepted.Contains(confirmationSummary.Head) |> should equal true
+
+            accepted.Contains("Applying package changes...") |> should equal true
+
+            accepted.Contains("Search and filters") |> should equal true
+
+            let help =
+                renderTextWithKeys width height confirmation [ Key.L.WithCtrl; Key.Enter; Key '?' ]
+
+            help.Contains("Current actions") |> should equal true
+            help.Contains("Enter apply | Esc cancel | ? Help") |> should equal true
+            help.Contains("Apply package changes?") |> should equal false
+            help.Contains("Search and filters") |> should equal false
+
+            let restoredConfirmation =
+                renderTextWithKeys
+                    width
+                    height
+                    confirmation
+                    [ Key.L.WithCtrl; Key.Enter; Key '?'; Key.Esc ]
+
+            restoredConfirmation.Contains("Apply package changes?") |> should equal true
+            restoredConfirmation.Contains("Impact summary") |> should equal true
+
+            confirmationSummary
+            |> List.iter (fun summary ->
+                restoredConfirmation.Contains(summary) |> should equal true)
+
+            restoredConfirmation.Contains("Search and filters") |> should equal false
 
             let applyingState =
                 { model () with
@@ -727,13 +814,21 @@ type AnsiDriverTests() =
             let applying = renderTextWithKeys width height applyingState []
 
             applying.Contains("Applying changes for 2 packages.") |> should equal true
+            applying.Contains("The approved preview is being applied.") |> should equal true
+            applying.Contains("Waiting for progress...") |> should equal true
             applying.Contains("? Help") |> should equal true
             applying.Contains("Direct.Package") |> should equal false
 
-            let help = renderTextWithKeys width height applyingState [ Key '?' ]
-            help.Contains("Current actions") |> should equal true
-            help.Contains("? / Esc") |> should equal true
-            help.Contains("Close help") |> should equal true
+            let applyingRows = applying.Split Environment.NewLine
+
+            applyingRows
+            |> Array.findIndex (_.Contains("Applying changes for 2 packages."))
+            |> should be (greaterThan (height / 4))
+
+            applyingRows
+            |> Array.find (_.Contains("Applying changes for 2 packages."))
+            |> _.IndexOf("Applying changes for 2 packages.", StringComparison.Ordinal)
+            |> should be (greaterThan 5)
 
             let progressing =
                 { model () with
@@ -746,18 +841,99 @@ type AnsiDriverTests() =
             progressing.Contains("75%") |> should equal true
             progressing.Contains("Completed 3 of 4 steps.") |> should equal true
 
-            let failed =
-                { model () with
-                    Route = Failure(PackageList, BackendSessionFailure)
-                    Failures = Map.ofList [ BackendSessionFailure, failure ] }
-                |> renderTextWithKeys width height
-                <| []
+            progressing.Split Environment.NewLine
+            |> Array.findIndex (_.Contains("Current step: Restoring projects"))
+            |> should be (greaterThan (height / 4))
 
-            failed.Contains(failure.Message) |> should equal true
-            failed.Contains("Press Esc to dismiss this message.") |> should equal true
-            failed.Contains("Esc dismiss | ? Help") |> should equal true
-            failed.Contains("Ready") |> should equal false
-            failed.Contains("Direct.Package") |> should equal false)
+            [ failure.Scope, failure, "Workspace Explorer connection failed"
+              operationFailure.Scope, operationFailure, "Package operation failed" ]
+            |> List.iter (fun (scope, problem, heading) ->
+                let failed =
+                    { model () with
+                        Route = Failure(PackageList, scope)
+                        Failures = Map.ofList [ scope, problem ] }
+                    |> renderTextWithKeys width height
+                    <| []
+
+                failed.Contains(heading) |> should equal true
+                failed.Contains(problem.Message) |> should equal true
+                failed.Contains("Press Esc to dismiss this message.") |> should equal true
+                failed.Contains("Esc dismiss | ? Help") |> should equal true
+                failed.Contains("Ready") |> should equal false
+                failed.Contains("Direct.Package") |> should equal false
+
+                failed.Split Environment.NewLine
+                |> Array.findIndex (_.Contains(heading))
+                |> should be (greaterThan (height / 4))))
+
+    [<Fact>]
+    member _.``owned failure takeover clears the fully masked confirmation surface``() =
+        let confirming =
+            { model () with
+                Route = Content(OperationPreview(preview, Summary)) }
+
+        let failure =
+            { Scope = BackendSessionFailure
+              Kind = BackendUnavailable
+              Message = "Workspace Explorer is unavailable." }
+
+        let failed =
+            { confirming with
+                Route = Failure(OperationPreview(preview, Summary), BackendSessionFailure)
+                Failures = Map.ofList [ BackendSessionFailure, failure ] }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let takeover =
+                renderTextAfter width height confirming [ Key.L.WithCtrl; Key.Enter ] [ failed ]
+
+            takeover.Contains(failure.Message) |> should equal true
+            takeover.Contains("Apply package changes?") |> should equal false
+            takeover.Contains("Update two packages.") |> should equal false
+
+            let restoredRoute =
+                renderTextAfter
+                    width
+                    height
+                    confirming
+                    [ Key.L.WithCtrl; Key.Enter ]
+                    [ failed; confirming ]
+
+            restoredRoute.Contains("Apply package changes?") |> should equal false
+            restoredRoute.Contains("Update two packages.") |> should equal true
+
+            if width = 126 then
+                restoredRoute.Contains("Direct.Package") |> should equal true)
+
+    [<Fact>]
+    member _.``contextual failures keep their route content and owned package actions``() =
+        let source = PackageSource "private-feed"
+
+        let cases =
+            [ SourceFailure source, "Sign in to private-feed."
+              PackageFailure direct.Id, "Package metadata could not be loaded."
+              ProjectFailure(ProjectId "Web"), "The Web project could not be inspected." ]
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            cases
+            |> List.iter (fun (scope, message) ->
+                let problem =
+                    { Scope = scope
+                      Kind = Rejected "The requested package action was rejected."
+                      Message = message }
+
+                let failed =
+                    { model () with
+                        Route = Failure(PackageDetails direct.Id, scope)
+                        Failures = Map.ofList [ scope, problem ] }
+
+                let screen = renderTextWithKeys width height failed [ Key.L.WithCtrl ]
+
+                screen.Contains(message) |> should equal true
+                screen.Contains("Esc dismiss | h/l tabs") |> should equal true
+                screen.Contains("Packages / Failure") |> should equal false
+                screen.Contains("Applying package changes") |> should equal false))
 
     [<Fact>]
     member _.``wide and compact content keeps target guidance ranges and impact meaning visible``

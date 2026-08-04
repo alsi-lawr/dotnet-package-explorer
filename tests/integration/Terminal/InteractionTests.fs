@@ -153,11 +153,13 @@ type InteractionTests() =
             { model () with
                 Route = Content(OperationPreview(preview, Summary)) }
 
-        run initial [ Key.L.WithCtrl; Key.Enter ]
-        |> should not' (contain (ConfirmPreview preview.Id))
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt width height initial [ Key.L.WithCtrl; Key.Enter ]
+            |> should not' (contain (ConfirmPreview preview.Id))
 
-        run initial [ Key.L.WithCtrl; Key.Enter; Key.Enter ]
-        |> should contain (ConfirmPreview preview.Id)
+            runAt width height initial [ Key.L.WithCtrl; Key.Enter; Key.Enter ]
+            |> should contain (ConfirmPreview preview.Id))
 
     [<Fact>]
     member _.``preview confirmation cancels through Escape without applying``() =
@@ -165,8 +167,10 @@ type InteractionTests() =
             { model () with
                 Route = Content(OperationPreview(preview, Summary)) }
 
-        run initial [ Key.L.WithCtrl; Key.Enter; Key.Esc ]
-        |> should not' (contain (ConfirmPreview preview.Id))
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt width height initial [ Key.L.WithCtrl; Key.Enter; Key.Esc ]
+            |> should not' (contain (ConfirmPreview preview.Id)))
 
     [<Fact>]
     member _.``preview project table keeps the fixed tab navigation ownership``() =
@@ -361,25 +365,52 @@ type InteractionTests() =
             |> should equal [ DismissFailure BackendSessionFailure ])
 
     [<Fact>]
-    member _.``local source failures keep package navigation and contextual dismissal``() =
+    member _.``local source and package failures keep package navigation and contextual dismissal``
+        ()
+        =
         let source = PackageSource "private-feed"
-        let scope = SourceFailure source
+
+        [ SourceFailure source, AuthenticationRequired(Some source), "Sign in to private-feed."
+          PackageFailure direct.Id,
+          Rejected "Package metadata was rejected.",
+          "Package metadata could not be loaded." ]
+        |> List.iter (fun (scope, kind, message) ->
+            let problem =
+                { Scope = scope
+                  Kind = kind
+                  Message = message }
+
+            let failed =
+                { model () with
+                    Route = Failure(PackageDetails direct.Id, scope)
+                    Pending = PendingRequests.empty
+                    Failures = Map.ofList [ scope, problem ] }
+
+            [ 126, 34; 90, 30 ]
+            |> List.iter (fun (width, height) ->
+                runAt width height failed [ Key.L; Key.Esc ]
+                |> should equal [ ShowReadme direct.Id; DismissFailure scope ]))
+
+    [<Fact>]
+    member _.``local project failures keep target navigation and contextual dismissal``() =
+        let scope = ProjectFailure(ProjectId "Web")
 
         let problem =
             { Scope = scope
-              Kind = AuthenticationRequired(Some source)
-              Message = "Sign in to private-feed." }
+              Kind = Rejected "Project inspection was rejected."
+              Message = "The Web project could not be inspected." }
 
         let failed =
             { model () with
-                Route = Failure(PackageDetails direct.Id, scope)
+                Route = Failure(PackageTargeting direct.Id, scope)
+                Focus = ProjectRow(ProjectId "Web")
                 Pending = PendingRequests.empty
                 Failures = Map.ofList [ scope, problem ] }
 
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
-            runAt width height failed [ Key.L; Key.Esc ]
-            |> should equal [ ShowReadme direct.Id; DismissFailure scope ])
+            runAt width height failed [ Key.J; Key.Esc ]
+            |> should equal [ SetFocus(ProjectRow(ProjectId "Worker")); DismissFailure scope ])
 
     [<Fact>]
     member _.``external owned failure clears confirmation before accepting input``() =

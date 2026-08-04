@@ -310,6 +310,27 @@ type ExplorerWindow
             Visible = false
         )
 
+    let confirmationBackdrop =
+        new View(
+            X = Pos.Absolute 0,
+            Y = Pos.Absolute 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            CanFocus = false,
+            Visible = false
+        )
+
+    let clearConfirmation () =
+        confirmationOpen <- false
+        confirmationBackdrop.Visible <- false
+        confirmationFrame.Visible <- false
+
+    let showConfirmation () =
+        confirmationOpen <- true
+        confirmationBackdrop.Visible <- true
+        confirmationFrame.Visible <- true
+        confirmationFrame.SetFocus() |> ignore
+
     let helpContents =
         new Label(
             X = Pos.Absolute 1,
@@ -640,12 +661,15 @@ type ExplorerWindow
         searchFrame.Visible <- not operation
 
         if operation then
+            let surfaceWidth = min 76 (max 40 (width - 8))
+            let surfaceHeight = min 14 (max 10 (this.Viewport.Height - 6))
+
             listFrame.Visible <- false
             contextFrame.Visible <- true
-            contextFrame.X <- Pos.Absolute 0
-            contextFrame.Y <- Pos.Absolute 0
-            contextFrame.Width <- Dim.Fill()
-            contextFrame.Height <- Dim.Fill 2
+            contextFrame.X <- Pos.Center()
+            contextFrame.Y <- Pos.Center()
+            contextFrame.Width <- Dim.Absolute surfaceWidth
+            contextFrame.Height <- Dim.Absolute surfaceHeight
         elif narrow then
             searchLabel.X <- Pos.Absolute 1
             searchLabel.Y <- Pos.Absolute 0
@@ -727,7 +751,12 @@ type ExplorerWindow
                | Content(OperationPreview(_, Dependencies)) -> true
                | _ -> false
 
-        if centered then
+        if operation then
+            context.X <- Pos.Absolute 1
+            context.Y <- Pos.Absolute 1
+            context.Width <- Dim.Fill 2
+            context.Height <- Dim.Fill 2
+        elif centered then
             let bodyWidth = min 64 availableWidth
             let bodyHeight = min 12 availableHeight
             context.X <- Pos.Absolute(max 0 ((availableWidth - bodyWidth) / 2))
@@ -758,8 +787,7 @@ type ExplorerWindow
 
         if incomingOwnedFailure then
             if confirmationOpen then
-                confirmationOpen <- false
-                confirmationFrame.Visible <- false
+                clearConfirmation ()
 
             if sortOpen then
                 sortOpen <- false
@@ -1016,8 +1044,7 @@ type ExplorerWindow
             sortReturnFocus |> Option.iter (fun view -> view.SetFocus() |> ignore)
             sortReturnFocus <- None
         elif confirmationOpen then
-            confirmationOpen <- false
-            confirmationFrame.Visible <- false
+            clearConfirmation ()
         else
             match model.Route with
             | _ when model.Pending.Apply.IsSome -> dispatch (Cancel ApplyRequest)
@@ -1076,8 +1103,7 @@ type ExplorerWindow
         elif confirmationOpen then
             match action with
             | Activate ->
-                confirmationOpen <- false
-                confirmationFrame.Visible <- false
+                clearConfirmation ()
                 guidance.Text <- "? Help"
                 status.Text <- "Applying package changes..."
                 route.Text <- "Packages / Applying"
@@ -1087,8 +1113,7 @@ type ExplorerWindow
                 | OperationPreview(preview, _) -> dispatch (ConfirmPreview preview.Id)
                 | _ -> ()
             | Back ->
-                confirmationOpen <- false
-                confirmationFrame.Visible <- false
+                clearConfirmation ()
                 restoreProjectionChrome ()
             | ShowHelp -> openHelp ()
             | _ -> ()
@@ -1195,7 +1220,6 @@ type ExplorerWindow
         | Activate ->
             match contentRoute () with
             | OperationPreview(preview, _) ->
-                confirmationOpen <- true
                 showConfirmationChrome ()
 
                 confirmationContents.Text <-
@@ -1204,8 +1228,7 @@ type ExplorerWindow
                        |> List.map (fun summary -> $"- {summary}")
                        |> String.concat Environment.NewLine)
 
-                confirmationFrame.Visible <- true
-                confirmationFrame.SetFocus() |> ignore
+                showConfirmation ()
             | _ ->
                 selectedPackage ()
                 |> Option.filter (fun _ -> projection.ListIsInteractive)
@@ -1303,6 +1326,7 @@ type ExplorerWindow
         this.Add route |> ignore
         this.Add sortBackdrop |> ignore
         this.Add sortFrame |> ignore
+        this.Add confirmationBackdrop |> ignore
         this.Add confirmationFrame |> ignore
         this.Add helpBackdrop |> ignore
         helpFrame.Add helpContents |> ignore
@@ -1329,6 +1353,7 @@ type ExplorerWindow
         Theme.apply schemes.Canvas sortBackdrop
         Theme.apply schemes.Information sortFrame
         Theme.apply schemes.Canvas sortContents
+        Theme.apply schemes.Canvas confirmationBackdrop
         Theme.apply schemes.Information confirmationFrame
         Theme.apply schemes.Canvas helpBackdrop
         Theme.apply schemes.Information helpFrame
