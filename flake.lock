@@ -18,7 +18,29 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "workspace-explorer": "workspace-explorer"
+      }
+    },
+    "workspace-explorer": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1785883810,
+        "narHash": "sha256-/rsiezT477hfddlXChVnSIzVumm6OBzhBPofRnl8IRE=",
+        "owner": "alsi-lawr",
+        "repo": "dotnet-workspace-explorer",
+        "rev": "f4828a2d54f4dca205ddad2993725e9608451504",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alsi-lawr",
+        "ref": "v0.3.0",
+        "repo": "dotnet-workspace-explorer",
+        "type": "github"
       }
     }
   },

@@ -2,9 +2,13 @@
   description = "Visual Studio-style NuGet package explorer for .NET terminals";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.workspace-explorer = {
+    url = "github:alsi-lawr/dotnet-workspace-explorer/v0.3.0";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs =
-    { nixpkgs, ... }:
+    { nixpkgs, workspace-explorer, ... }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -55,6 +59,12 @@
           dotnet-runtime = pkgs.dotnet-runtime_10;
           selfContainedBuild = true;
           executables = [ "dotnet-pe" ];
+          makeWrapperArgs = [
+            "--prefix"
+            "PATH"
+            ":"
+            "${workspace-explorer.packages.${system}.default}/bin"
+          ];
 
           meta = {
             description = "Visual Studio-style NuGet package explorer for .NET terminals";
