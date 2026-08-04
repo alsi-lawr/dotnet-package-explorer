@@ -21,5 +21,6 @@
         <Project
             Path="tests/unit/RpcClient/Dotnet.PackageExplorer.RpcClient.UnitTests.fsproj"
         />
+        <Project Path="tests/unit/Terminal/Dotnet.PackageExplorer.Terminal.UnitTests.fsproj" />
     </Folder>
 </Solution>

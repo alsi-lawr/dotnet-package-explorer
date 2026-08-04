@@ -1,12 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <OutputType>Exe</OutputType>
         <AssemblyName>Dotnet.PackageExplorer.Terminal</AssemblyName>
         <RootNamespace>Dotnet.PackageExplorer.Terminal</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="AssemblyInfo.fs" />
+        <Compile Include="Presentation.fs" />
+        <Compile Include="Theme.fs" />
+        <Compile Include="Keyboard.fs" />
+        <Compile Include="Renderer.fs" />
+        <Compile Include="Runtime.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="../Application/Dotnet.PackageExplorer.Application.fsproj" />
         <ProjectReference Include="../RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj" />
         <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="Terminal.Gui" />
     </ItemGroup>
 </Project>
