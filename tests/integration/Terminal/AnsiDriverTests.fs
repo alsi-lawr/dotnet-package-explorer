@@ -629,8 +629,8 @@ type AnsiDriverTests() =
                 let initial =
                     { model () with
                         Mode = mode
-                        Packages = [ dependencyInjection; solutionPersistence ]
-                        ActivePackage = Some dependencyInjection.Id }
+                        Packages = releasePackages
+                        ActivePackage = Some releasePackages.Head.Id }
 
                 let screen = renderTextWithKeys width height initial []
 
@@ -643,6 +643,16 @@ type AnsiDriverTests() =
                 headings
                 |> List.iter (fun heading ->
                     screen.Contains(heading, StringComparison.Ordinal) |> should equal true)
+
+                match mode with
+                | Updates
+                | Consolidate ->
+                    [ "9.0.7"; "10.0.0"; "1.0.52"; "1.1.0"; "Transitive" ]
+                    |> List.iter (fun comparison ->
+                        screen.Contains(comparison, StringComparison.Ordinal)
+                        |> should equal true)
+                | Browse
+                | Installed -> ()
 
                 if width = 126 then
                     screen.Contains("Loading package details...", StringComparison.Ordinal)

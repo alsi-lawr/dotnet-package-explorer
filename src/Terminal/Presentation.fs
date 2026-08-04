@@ -28,7 +28,7 @@ module internal Presentation =
     let NarrowBoundary = 100
 
     [<Literal>]
-    let WideListPercentage = 65
+    let WideListPercentage = 69
 
     [<Literal>]
     let WideRetainedListPercentage = 60

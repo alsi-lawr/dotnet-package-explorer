@@ -66,7 +66,7 @@ type PresentationTests() =
           Updates, [ "Current"; "Latest"; "Kind" ]
           Consolidate, [ "Current"; "Latest"; "Kind" ] ]
         |> List.iter (fun (mode, headings) ->
-            [ 126, 76; 90, 86 ]
+            [ 126, 81; 90, 86 ]
             |> List.iter (fun (columns, maximumRowWidth) ->
                 let actual =
                     { model () with
