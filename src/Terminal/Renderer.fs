@@ -131,7 +131,8 @@ type ExplorerWindow
             Y = Pos.Absolute 2,
             Width = Dim.Fill(),
             Height = Dim.Fill 2,
-            BorderStyle = LineStyle.None
+            BorderStyle = LineStyle.None,
+            ShowHeadingPrefix = false
         )
 
     let contextButton x width title =
@@ -201,7 +202,8 @@ type ExplorerWindow
             Y = Pos.Absolute 0,
             Width = Dim.Fill(),
             Height = Dim.Fill(),
-            CanFocus = false
+            CanFocus = false,
+            ShowHeadingPrefix = false
         )
 
     let sortFrame =
@@ -221,7 +223,8 @@ type ExplorerWindow
             Y = Pos.Absolute 0,
             Width = Dim.Fill(),
             Height = Dim.Fill(),
-            CanFocus = false
+            CanFocus = false,
+            ShowHeadingPrefix = false
         )
 
     let confirmationFrame =
