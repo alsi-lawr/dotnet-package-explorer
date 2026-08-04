@@ -17,9 +17,13 @@ type KeyboardTests() =
           Key.D3, SelectMode Updates
           Key.D4, SelectMode Consolidate
           Key.J, MoveRow 1
+          Key.CursorDown, MoveRow 1
           Key.K, MoveRow -1
+          Key.CursorUp, MoveRow -1
           Key.H, MoveHorizontal -1
+          Key.CursorLeft, MoveHorizontal -1
           Key.L, MoveHorizontal 1
+          Key.CursorRight, MoveHorizontal 1
           Key.H.WithCtrl, MovePane -1
           Key.L.WithCtrl, MovePane 1
           Key.S, OpenSort
@@ -32,6 +36,11 @@ type KeyboardTests() =
           Key.Esc, Back
           Key.Q, Quit ]
         |> List.iter (fun (key, expected) -> Keyboard.action key |> should equal (Some expected))
+
+    [<Fact>]
+    member _.``help opens for direct and shifted slash question mark input``() =
+        [ Key '?'; (Key '/').WithShift ]
+        |> List.iter (fun key -> Keyboard.action key |> should equal (Some ShowHelp))
 
     [<Fact>]
     member _.``unassigned keys remain available to focused Terminal Gui controls``() =
