@@ -70,7 +70,7 @@ Test an isolated profile installation with:
 
 ```console
 nix profile install path:. --profile artifacts/nix-profile
-artifacts/nix-profile/bin/dotnet-package-explorer MySolution.slnx
+artifacts/nix-profile/bin/dotnet-pe MySolution.slnx
 ```
 
 The Nix package does not include Workspace Explorer. Runtime checks still need a compatible
@@ -92,8 +92,8 @@ Test both command forms from an isolated installation:
 ```console
 dotnet tool install ALSI.PackageExplorer \
   --tool-path artifacts/tool --add-source artifacts/packages --version 0.1.0
-artifacts/tool/dotnet-package-explorer MySolution.slnx
-PATH="$PWD/artifacts/tool:$PATH" dotnet package-explorer MySolution.slnx
+artifacts/tool/dotnet-pe MySolution.slnx
+PATH="$PWD/artifacts/tool:$PATH" dotnet pe MySolution.slnx
 ```
 
 ## Self-contained application
@@ -104,7 +104,7 @@ PATH="$PWD/artifacts/tool:$PATH" dotnet package-explorer MySolution.slnx
 dotnet publish src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj \
   --configuration Release --property PublishProfile=linux-x64 \
   --output artifacts/publish/linux-x64
-artifacts/publish/linux-x64/dotnet-package-explorer MySolution.slnx
+artifacts/publish/linux-x64/dotnet-pe MySolution.slnx
 ```
 
 This includes the Package Explorer application runtime only. Testing still needs `dotnet` and a
@@ -113,7 +113,7 @@ compatible, separately installed Workspace Explorer backend.
 ## Showcase
 
 The moving showcase uses the local VHS fork and a disposable F# project. Make sure
-`dotnet package-explorer` and `dotnet we` resolve, then run:
+`dotnet pe` and `dotnet we` resolve, then run:
 
 ```console
 VHS_SOURCE=/home/alex/dev/vhs ./showcase/capture.sh

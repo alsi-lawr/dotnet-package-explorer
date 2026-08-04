@@ -54,13 +54,13 @@
           dotnet-sdk = pkgs.dotnet-sdk_10;
           dotnet-runtime = pkgs.dotnet-runtime_10;
           selfContainedBuild = true;
-          executables = [ "dotnet-package-explorer" ];
+          executables = [ "dotnet-pe" ];
 
           meta = {
             description = "Visual Studio-style NuGet package explorer for .NET terminals";
             homepage = "https://github.com/alsi-lawr/dotnet-package-explorer";
             license = lib.licenses.mit;
-            mainProgram = "dotnet-package-explorer";
+            mainProgram = "dotnet-pe";
           };
         };
     in
@@ -77,7 +77,7 @@
       apps = forAllSystems (system: {
         default = {
           type = "app";
-          program = "${packageExplorer system}/bin/dotnet-package-explorer";
+          program = "${packageExplorer system}/bin/dotnet-pe";
         };
       });
 

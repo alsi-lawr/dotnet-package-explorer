@@ -111,6 +111,6 @@ type RuntimeTests() =
     [<Fact>]
     member _.``non-interactive startup diagnostic remains plain stable and bounded``() =
         Program.NonInteractiveDiagnostic
-        |> should equal "dotnet-package-explorer requires an interactive terminal."
+        |> should equal "dotnet-pe requires an interactive terminal."
 
         Program.NonInteractiveDiagnostic.Length |> should be (lessThan 100)

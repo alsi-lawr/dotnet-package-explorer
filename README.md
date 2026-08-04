@@ -22,6 +22,11 @@
   <img src="https://img.shields.io/nuget/v/ALSI.PackageExplorer?label=NuGet"
        alt="NuGet package version">
 </a>
+<a href="https://github.com/alsi-lawr/dotnet-package-explorer/actions/workflows/build-and-test.yml">
+  <img
+    src="https://github.com/alsi-lawr/dotnet-package-explorer/actions/workflows/build-and-test.yml/badge.svg"
+    alt="Build and test">
+</a>
 <a href="LICENSE">
   <img src="https://img.shields.io/badge/license-MIT-22c55e" alt="License: MIT">
 </a>
@@ -49,10 +54,11 @@ dotnet tool install --global ALSI.PackageExplorer
 dotnet tool install --global ALSI.WorkspaceExplorer
 ```
 
-Then open a solution, project, or directory:
+Then open a solution, project, or directory with either command:
 
 ```console
-dotnet package-explorer MySolution.slnx
+dotnet-pe MySolution.slnx
+dotnet pe MySolution.slnx
 ```
 
 Package Explorer can also be installed or run from its Nix flake:

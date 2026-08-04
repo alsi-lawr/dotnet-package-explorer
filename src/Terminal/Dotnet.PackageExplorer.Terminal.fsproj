@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <AssemblyName>dotnet-package-explorer</AssemblyName>
+        <AssemblyName>dotnet-pe</AssemblyName>
         <RootNamespace>Dotnet.PackageExplorer.Terminal</RootNamespace>
         <PackAsTool>true</PackAsTool>
-        <ToolCommandName>dotnet-package-explorer</ToolCommandName>
+        <ToolCommandName>dotnet-pe</ToolCommandName>
         <PackageId>ALSI.PackageExplorer</PackageId>
         <Version>0.1.0</Version>
-        <Title>dotnet-package-explorer</Title>
+        <Title>dotnet-pe</Title>
         <Description>Explore and manage NuGet packages from a terminal.</Description>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageProjectUrl>https://github.com/alsi-lawr/dotnet-package-explorer</PackageProjectUrl>
@@ -15,6 +15,9 @@
         <RepositoryType>git</RepositoryType>
         <PackageTags>dotnet;nuget;packages;terminal;tui;tool</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageReadmeSource>$(MSBuildProjectDirectory)/../../README.md</PackageReadmeSource>
+        <PackageReadmeOutput>$(MSBuildProjectExtensionsPath)package/README.md</PackageReadmeOutput>
+        <PackageReadmeGenerator>$(MSBuildProjectDirectory)/../../scripts/PackageReadme.fsx</PackageReadmeGenerator>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
@@ -37,7 +40,17 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="../../README.md" Pack="true" PackagePath="/" />
+        <None Include="$(PackageReadmeOutput)" Pack="true" PackagePath="/" />
         <None Include="../../LICENSE" Pack="true" PackagePath="/" />
     </ItemGroup>
+
+    <Target
+        Name="GeneratePackageReadme"
+        BeforeTargets="GenerateNuspec"
+        Inputs="$(PackageReadmeSource);$(PackageReadmeGenerator)"
+        Outputs="$(PackageReadmeOutput)">
+        <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(PackageReadmeOutput)'))" />
+        <Exec
+            Command="dotnet fsi &quot;$(PackageReadmeGenerator)&quot; &quot;$(PackageReadmeSource)&quot; &quot;$(PackageReadmeOutput)&quot;" />
+    </Target>
 </Project>

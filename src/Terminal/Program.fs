@@ -5,8 +5,7 @@ open System.IO
 
 module Program =
     [<Literal>]
-    let NonInteractiveDiagnostic =
-        "dotnet-package-explorer requires an interactive terminal."
+    let NonInteractiveDiagnostic = "dotnet-pe requires an interactive terminal."
 
     [<EntryPoint>]
     let main arguments =

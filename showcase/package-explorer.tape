@@ -2,7 +2,7 @@
 Output docs/showcase/package-explorer.webp
 
 Require dotnet
-Require dotnet-package-explorer
+Require dotnet-pe
 
 Set Shell zsh
 Set Theme "Tomorrow Night"
@@ -24,9 +24,10 @@ Set PlaybackSpeed 1
 Set TypingSpeed 75ms
 Set CursorBlink false
 
-Type 'dotnet package-explorer "$PACKAGE_EXPLORER_SHOWCASE_TARGET"'
+Type 'dotnet pe "$PACKAGE_EXPLORER_SHOWCASE_TARGET"'
 Enter
-Sleep 5s
+Wait+Screen@60s /Browse/
+Sleep 1s
 
 Type "2"
 Sleep 4s
@@ -73,12 +74,6 @@ Sleep 3s
 Type "/"
 Type "newtonsoft"
 Enter
-Sleep 5s
-Escape
-Type "j"
-Sleep 1s
-Enter
+Wait+Screen@10s /Searching packages/
+Wait+Screen@30s /Ready/
 Sleep 3s
-
-Type "q"
-Sleep 1s

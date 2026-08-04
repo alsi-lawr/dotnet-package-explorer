@@ -11,6 +11,8 @@ cat > "$workspace/Showcase.fsproj" <<'PROJECT'
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Humanizer.Core" Version="2.8.26" />
