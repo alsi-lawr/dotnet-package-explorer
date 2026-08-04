@@ -14,6 +14,7 @@ type TerminalProjection =
       Rows: string list
       ContextTitle: string
       Context: string
+      Actions: string
       Status: string
       Route: string
       Width: TerminalWidth }
@@ -107,6 +108,34 @@ module internal Presentation =
         | SingleProject project -> project.Name
         | Solution(path, _)
         | Workspace(path, _) -> IO.Path.GetFileName path |> Option.ofObj |> Option.defaultValue path
+
+    let private operationPackageCount =
+        function
+        | InstallPackage _
+        | UninstallPackage _
+        | ConsolidatePackage _ -> 1
+        | UpdateSelectedPackages packages -> packages.Count
+
+    let private packageCountText count =
+        if count = 1 then "1 package" else $"{count} packages"
+
+    let private progressIndicator percentage =
+        let width = 20
+        let completed = Math.Clamp(percentage, 0, 100) * width / 100
+        "[" + String('#', completed) + String('.', width - completed) + "]"
+
+    let private packageActions =
+        "Tab modes | 1-4 jump | j/k rows | h/l tabs | C-h/C-l panes | s sort"
+        + "\n/ search | Space select | Enter details | p preview | r refresh | "
+        + "Esc back | q quit | ? Help"
+
+    let private ownsFailureInput =
+        function
+        | BackendSessionFailure
+        | OperationFailure _ -> true
+        | SourceFailure _
+        | PackageFailure _
+        | ProjectFailure _ -> false
 
     let private detailsMarkdown (model: Model) (package: PackageId) =
         match Map.tryFind package model.Details with
@@ -235,21 +264,42 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
             | Failure(route, scope) -> route, Map.tryFind scope model.Failures
 
         match failure with
-        | Some problem -> "Package Explorer", $"# {problem.Message}", "Failure"
+        | Some problem when problem.Scope = BackendSessionFailure ->
+            "Workspace Explorer | Packages",
+            $"Workspace Explorer connection failed\n\n{problem.Message}\n\n"
+            + "Press Esc to dismiss this message.",
+            "Esc dismiss | ? Help",
+            "Packages / Failure"
+        | Some problem when ownsFailureInput problem.Scope ->
+            "Workspace Explorer | Packages",
+            $"Package operation failed\n\n{problem.Message}\n\n"
+            + "Press Esc to dismiss this message.",
+            "Esc dismiss | ? Help",
+            "Packages / Failure"
+        | Some problem -> "Package Explorer", problem.Message, packageActions, "Failure"
         | None ->
             match contentRoute with
             | PackageList ->
                 match model.ActivePackage with
-                | Some package -> packageId package, detailsMarkdown model package, "List"
+                | Some package ->
+                    packageId package, detailsMarkdown model package, packageActions, "List"
                 | None ->
                     "Package details",
                     "Select a package and press Enter to open its details.",
+                    packageActions,
                     "List"
-            | PackageDetails package -> packageId package, detailsMarkdown model package, "Details"
+            | PackageDetails package ->
+                packageId package, detailsMarkdown model package, packageActions, "Details"
             | PackageReadme package ->
-                packageId package + " | README", readmeMarkdown model package, "README"
+                packageId package + " | README",
+                readmeMarkdown model package,
+                packageActions,
+                "README"
             | PackageTargeting package ->
-                packageId package + " | Targets", targetingMarkdown model package, "Targets"
+                packageId package + " | Targets",
+                targetingMarkdown model package,
+                packageActions,
+                "Targets"
             | OperationPreview(preview, tab) ->
                 let tabName =
                     match tab with
@@ -258,24 +308,41 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
                     | Dependencies -> "Dependencies"
                     | Files -> "Files"
 
-                "Preview | " + tabName, previewMarkdown preview tab, "Preview / " + tabName
+                "Preview | " + tabName,
+                previewMarkdown preview tab,
+                packageActions,
+                "Preview / " + tabName
             | OperationConfirmation preview ->
-                "Confirm package change",
-                $"# Confirm change\n\n{String.concat Environment.NewLine preview.Summary}",
-                "Confirmation"
+                let count = operationPackageCount preview.Operation
+                let packages = packageCountText count
+
+                "Applying package changes",
+                $"Applying changes for {packages}.\n\n"
+                + "The approved preview is being applied.\n\nWaiting for progress...",
+                "? Help",
+                "Packages / Applying"
             | OperationProgress progress ->
                 let total = max 1 progress.Total
-                let percentage = (progress.Completed * 100) / total
+                let completed = Math.Clamp(progress.Completed, 0, total)
+                let percentage = (completed * 100) / total
 
-                "Applying package change",
-                "# "
-                + progress.Status
-                + $"\n\n{progress.Completed} of {progress.Total} ({percentage}"
-                + "%)",
-                "Progress"
+                "Applying package changes",
+                $"Current step: {progress.Status}\n\n"
+                + $"{progressIndicator percentage} {percentage}"
+                + "%\n\n"
+                + $"Completed {completed} of {progress.Total} steps.",
+                "? Help",
+                "Packages / Progress"
+
+    let ownsInput (model: Model) =
+        match model.Route with
+        | Failure(_, scope) -> ownsFailureInput scope
+        | Content(OperationConfirmation _)
+        | Content(OperationProgress _) -> true
+        | Content _ -> false
 
     let project columns (model: Model) =
-        let contextTitle, context, route = content model
+        let contextTitle, context, actions, route = content model
         let active = modeName model.Mode
 
         let modes =
@@ -291,8 +358,14 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
             |> Option.defaultValue "all sources"
 
         let status =
-            if model.Pending.Apply.IsSome then
-                "Applying package change..."
+            if
+                match model.Route with
+                | Failure _ -> true
+                | _ -> false
+            then
+                "Action required"
+            elif model.Pending.Apply.IsSome then
+                "Applying package changes..."
             elif model.Pending.Preview.IsSome then
                 "Building preview..."
             elif model.Pending.Refresh.IsSome then
@@ -312,6 +385,7 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
           Rows = model.Packages |> List.map (row model)
           ContextTitle = contextTitle
           Context = context
+          Actions = actions
           Status = $"{targetName model.Target} | {status}"
           Route = route
           Width = width columns }

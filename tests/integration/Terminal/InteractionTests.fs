@@ -11,12 +11,12 @@ open Xunit
 
 [<Sealed>]
 type InteractionTests() =
-    let run initial keys =
+    let runAt width height initial keys =
         use application = Application.Create().Init "ansi"
 
         application.Driver
         |> Option.ofObj
-        |> Option.iter (fun driver -> driver.SetScreenSize(120, 35))
+        |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
 
         let messages = ResizeArray<Message>()
 
@@ -28,6 +28,53 @@ type InteractionTests() =
         application.Invoke(
             Action(fun () ->
                 keys
+                |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
+
+                application.RequestStop())
+        )
+
+        application.Run window |> ignore
+        messages |> Seq.toList
+
+    let run initial keys = runAt 120 35 initial keys
+
+    let runFailureTransitionAt width height initial openKeys scope afterKeys =
+        use application = Application.Create().Init "ansi"
+
+        application.Driver
+        |> Option.ofObj
+        |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
+
+        let messages = ResizeArray<Message>()
+
+        use window =
+            new ExplorerWindow(initial, messages.Add, application.RequestStop, Ansi16)
+
+        use _keyboard = window.BindKeyboard application.Keyboard
+
+        let problem =
+            { Scope = scope
+              Kind = BackendUnavailable
+              Message = "Workspace Explorer is unavailable." }
+
+        let failed =
+            let retained =
+                match initial.Route with
+                | Content route
+                | Failure(route, _) -> route
+
+            { initial with
+                Route = Failure(retained, scope)
+                Failures = Map.ofList [ scope, problem ] }
+
+        application.Invoke(
+            Action(fun () ->
+                openKeys
+                |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
+
+                window.Render failed
+
+                afterKeys
                 |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
 
                 application.RequestStop())
@@ -114,3 +161,148 @@ type InteractionTests() =
                 Pending.Refresh = Some(RequestToken 1L) }
 
         run pending [ Key.Esc ] |> should equal [ Cancel RefreshRequest ]
+
+    [<Fact>]
+    member _.``operation routes block package commands and Help owns input until it closes``() =
+        let progress =
+            { Preview = preview.Id
+              Operation = OperationId "operation-1"
+              Completed = 1
+              Total = 2
+              Status = "Restoring projects" }
+
+        let applying =
+            { model () with
+                Route = Content(OperationConfirmation preview)
+                Pending.Apply = Some(RequestToken 20L) }
+
+        let progressing =
+            { applying with
+                Route = Content(OperationProgress progress) }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            [ applying; progressing ]
+            |> List.iter (fun operation ->
+                runAt
+                    width
+                    height
+                    operation
+                    [ Key.Tab
+                      Key.D1
+                      Key.J
+                      Key.L
+                      Key.S
+                      Key '/'
+                      Key.Space
+                      Key.Enter
+                      Key.P
+                      Key.R
+                      Key.Esc
+                      Key.Q
+                      Key '?'
+                      Key.D1
+                      Key.Enter
+                      Key.Esc
+                      Key.R ]
+                |> should be Empty))
+
+    [<Fact>]
+    member _.``Help over confirmation blocks apply and returns to the unchanged preview``() =
+        let initial =
+            { model () with
+                Route = Content(OperationPreview(preview, Summary)) }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt
+                width
+                height
+                initial
+                [ Key.L.WithCtrl
+                  Key.Enter
+                  Key.D1
+                  Key.Space
+                  Key.P
+                  Key.R
+                  Key '?'
+                  Key.D1
+                  Key.Enter
+                  Key.Esc
+                  Key.Enter ]
+            |> should equal [ ConfirmPreview preview.Id ])
+
+    [<Fact>]
+    member _.``failure accepts only Help and its displayed dismiss action``() =
+        let problem =
+            { Scope = BackendSessionFailure
+              Kind = BackendUnavailable
+              Message = "Workspace Explorer is unavailable." }
+
+        let failed =
+            { model () with
+                Route = Failure(PackageList, BackendSessionFailure)
+                Failures = Map.ofList [ BackendSessionFailure, problem ] }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt
+                width
+                height
+                failed
+                [ Key.D1; Key.R; Key '?'; Key.Enter; Key.D1; Key.Esc; Key.Esc ]
+            |> should equal [ DismissFailure BackendSessionFailure ])
+
+    [<Fact>]
+    member _.``local source failures keep package navigation and contextual dismissal``() =
+        let source = PackageSource "private-feed"
+        let scope = SourceFailure source
+
+        let problem =
+            { Scope = scope
+              Kind = AuthenticationRequired(Some source)
+              Message = "Sign in to private-feed." }
+
+        let failed =
+            { model () with
+                Route = Failure(PackageDetails direct.Id, scope)
+                Pending = PendingRequests.empty
+                Failures = Map.ofList [ scope, problem ] }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt width height failed [ Key.L; Key.Esc ]
+            |> should equal [ ShowReadme direct.Id; DismissFailure scope ])
+
+    [<Fact>]
+    member _.``external owned failure clears confirmation before accepting input``() =
+        let confirming =
+            { model () with
+                Route = Content(OperationPreview(preview, Summary)) }
+
+        [ BackendSessionFailure; OperationFailure(Some preview.Id) ]
+        |> List.iter (fun scope ->
+            [ 126, 34; 90, 30 ]
+            |> List.iter (fun (width, height) ->
+                runFailureTransitionAt
+                    width
+                    height
+                    confirming
+                    [ Key.L.WithCtrl; Key.Enter ]
+                    scope
+                    [ Key.D1; Key.R; Key.Enter; Key '?'; Key.D1; Key.Enter; Key.Esc; Key.Esc ]
+                |> should equal [ DismissFailure scope ]))
+
+    [<Fact>]
+    member _.``external owned failure clears operation Help before accepting input``() =
+        let applying =
+            { model () with
+                Route = Content(OperationConfirmation preview)
+                Pending.Apply = Some(RequestToken 20L) }
+
+        [ BackendSessionFailure; OperationFailure(Some preview.Id) ]
+        |> List.iter (fun scope ->
+            [ 126, 34; 90, 30 ]
+            |> List.iter (fun (width, height) ->
+                runFailureTransitionAt width height applying [ Key '?' ] scope [ Key.Esc ]
+                |> should equal [ DismissFailure scope ]))

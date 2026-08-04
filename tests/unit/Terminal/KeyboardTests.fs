@@ -28,6 +28,7 @@ type KeyboardTests() =
           Key.Enter, Activate
           Key.P, Preview
           Key.R, RefreshPackages
+          Key '?', ShowHelp
           Key.Esc, Back
           Key.Q, Quit ]
         |> List.iter (fun (key, expected) -> Keyboard.action key |> should equal (Some expected))

@@ -16,6 +16,7 @@ type TerminalAction =
     | Activate
     | Preview
     | RefreshPackages
+    | ShowHelp
     | Back
     | Quit
 
@@ -42,6 +43,7 @@ module internal Keyboard =
         elif matches Key.Enter key then Some Activate
         elif matches Key.P key then Some Preview
         elif matches Key.R key then Some RefreshPackages
+        elif matches (Key '?') key then Some ShowHelp
         elif matches Key.Esc key then Some Back
         elif matches Key.Q key then Some Quit
         else None

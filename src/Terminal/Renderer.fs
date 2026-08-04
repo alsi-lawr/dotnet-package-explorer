@@ -21,6 +21,7 @@ type ExplorerWindow
     let mutable sortOpen = false
     let mutable pendingSort = initial.Sort
     let mutable confirmationOpen = false
+    let mutable helpOpen = false
     let mutable narrowContext = false
     let mutable targetIndex = 0
 
@@ -167,16 +168,13 @@ type ExplorerWindow
             BorderStyle = LineStyle.Rounded
         )
 
-    let help =
+    let guidance =
         new Label(
             X = Pos.Absolute 0,
             Y = Pos.AnchorEnd 3,
             Width = Dim.Fill(),
             Height = Dim.Absolute 2,
-            Text =
-                "Tab modes | 1-4 jump | j/k rows | h/l tabs | C-h/C-l panes | s sort"
-                + "\n/ search | Space select | Enter details | p preview | r refresh | "
-                + "Esc back | q quit"
+            Text = ""
         )
 
     let route =
@@ -222,9 +220,18 @@ type ExplorerWindow
             X = Pos.Absolute 0,
             Y = Pos.Absolute 0,
             Width = Dim.Fill(),
-            Height = Dim.Fill(),
+            Height = Dim.Fill 2,
             CanFocus = false,
             ShowHeadingPrefix = false
+        )
+
+    let confirmationActions =
+        new Label(
+            X = Pos.Absolute 1,
+            Y = Pos.AnchorEnd 1,
+            Width = Dim.Fill 1,
+            Height = Dim.Absolute 1,
+            Text = "[Enter] Apply    [Esc] Cancel    [?] Help"
         )
 
     let confirmationFrame =
@@ -232,8 +239,28 @@ type ExplorerWindow
             X = Pos.Center(),
             Y = Pos.Center(),
             Width = Dim.Absolute 58,
-            Height = Dim.Absolute 9,
-            Title = "Confirm package change",
+            Height = Dim.Absolute 12,
+            Title = "Apply package changes?",
+            BorderStyle = LineStyle.Rounded,
+            Visible = false
+        )
+
+    let helpContents =
+        new Label(
+            X = Pos.Absolute 1,
+            Y = Pos.Absolute 0,
+            Width = Dim.Fill 1,
+            Height = Dim.Fill(),
+            CanFocus = false
+        )
+
+    let helpFrame =
+        new FrameView(
+            X = Pos.Center(),
+            Y = Pos.Center(),
+            Width = Dim.Absolute 76,
+            Height = Dim.Absolute 22,
+            Title = "Help",
             BorderStyle = LineStyle.Rounded,
             Visible = false
         )
@@ -245,6 +272,35 @@ type ExplorerWindow
         match model.Route with
         | Content value
         | Failure(value, _) -> value
+
+    let operationOwnsInput () =
+        confirmationOpen || Presentation.ownsInput model
+
+    let currentActions () =
+        if confirmationOpen then
+            "Enter apply | Esc cancel | ? Help"
+        else
+            projection.Actions
+
+    let renderHelp () =
+        helpContents.Text <-
+            "Current actions\n"
+            + currentActions ()
+            + "\n\nNavigation\n"
+            + "Tab / Shift-Tab  Next / previous mode\n"
+            + "1-4              Browse / Installed / Updates / Consolidate\n"
+            + "j / k            Move down / up\n"
+            + "h / l            Previous / next tab\n"
+            + "Ctrl-h / Ctrl-l  Previous / next pane\n\n"
+            + "Packages\n"
+            + "s                Sort\n"
+            + "/                Search\n"
+            + "Space            Select\n"
+            + "Enter            Open or confirm\n"
+            + "p                Preview\n"
+            + "r                Refresh\n\n"
+            + "? / Esc          Close help\n"
+            + "q                Quit"
 
     let activeIndex () =
         model.ActivePackage
@@ -306,8 +362,19 @@ type ExplorerWindow
     let setLayout width =
         let narrow = Presentation.width width = Narrow
         let showContext = narrow && narrowContext && projection.Route <> "List"
+        let operation = Presentation.ownsInput model
 
-        if narrow then
+        modeFrame.Visible <- not operation
+        searchFrame.Visible <- not operation
+
+        if operation then
+            listFrame.Visible <- false
+            contextFrame.Visible <- true
+            contextFrame.X <- Pos.Absolute 0
+            contextFrame.Y <- Pos.Absolute 0
+            contextFrame.Width <- Dim.Fill()
+            contextFrame.Height <- Dim.Fill 3
+        elif narrow then
             searchLabel.X <- Pos.Absolute 1
             searchLabel.Y <- Pos.Absolute 0
             search.X <- Pos.Absolute 8
@@ -324,7 +391,9 @@ type ExplorerWindow
             listFrame.X <- Pos.Absolute 0
             listFrame.Width <- Dim.Fill()
             contextFrame.X <- Pos.Absolute 0
+            contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()
+            contextFrame.Height <- Dim.Fill 3
             listFrame.Visible <- not showContext
             contextFrame.Visible <- showContext
         else
@@ -348,14 +417,33 @@ type ExplorerWindow
             listFrame.X <- Pos.Absolute 0
             listFrame.Width <- Dim.Percent 45
             contextFrame.X <- Pos.Right listFrame
+            contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()
+            contextFrame.Height <- Dim.Fill 3
             listFrame.Visible <- true
             contextFrame.Visible <- true
+
+        let overlayWidth = min 76 (max 40 (width - 4))
+        helpFrame.Width <- Dim.Absolute overlayWidth
 
     let render nextModel =
         let previousContent = contentRoute ()
         rendering <- true
         model <- nextModel
+
+        let incomingOwnedFailure =
+            match model.Route with
+            | Failure _ -> Presentation.ownsInput model
+            | Content _ -> false
+
+        if incomingOwnedFailure then
+            if confirmationOpen then
+                confirmationOpen <- false
+                confirmationFrame.Visible <- false
+
+            helpOpen <- false
+            helpFrame.Visible <- false
+
         projection <- Presentation.project this.Viewport.Width model
 
         modeButtons
@@ -397,11 +485,14 @@ type ExplorerWindow
             prerelease.Value <- prereleaseValue
 
         let packageTabs, activeDetailsTab =
-            match contentRoute () with
-            | PackageList when model.ActivePackage.IsSome -> true, Some "Details"
-            | PackageDetails _ -> true, Some "Details"
-            | PackageReadme _ -> true, Some "README"
-            | _ -> false, None
+            match model.Route, contentRoute () with
+            | Failure _, _ when Presentation.ownsInput model -> false, None
+            | _, route ->
+                match route with
+                | PackageList when model.ActivePackage.IsSome -> true, Some "Details"
+                | PackageDetails _ -> true, Some "Details"
+                | PackageReadme _ -> true, Some "README"
+                | _ -> false, None
 
         detailsButton.Visible <- packageTabs
         readmeButton.Visible <- packageTabs
@@ -433,8 +524,9 @@ type ExplorerWindow
             readmeButton
 
         let activePreviewTab =
-            match contentRoute () with
-            | OperationPreview(_, tab) -> Some tab
+            match model.Route, contentRoute () with
+            | Failure _, _ when Presentation.ownsInput model -> None
+            | _, OperationPreview(_, tab) -> Some tab
             | _ -> None
 
         previewButtons
@@ -474,13 +566,22 @@ type ExplorerWindow
 
         status.Text <- projection.Status
         route.Text <- projection.Route
+        guidance.Text <- currentActions ()
+
+        if confirmationOpen then
+            status.Text <- "Package changes are awaiting confirmation"
+            route.Text <- "Packages / Confirmation"
+
+        if helpOpen then
+            renderHelp ()
 
         match model.Route with
         | Failure _ ->
             Theme.apply schemes.Failure status
             Theme.apply schemes.Failure context
         | _ when
-            model.Pending.Apply.IsSome
+            confirmationOpen
+            || model.Pending.Apply.IsSome
             || model.Pending.Preview.IsSome
             || model.Pending.Refresh.IsSome
             || model.Pending.Updates.IsSome
@@ -602,7 +703,65 @@ type ExplorerWindow
                 packageList.SetFocus() |> ignore
                 setLayout this.Viewport.Width
 
-    let handle (action: TerminalAction) =
+    let openHelp () =
+        helpOpen <- true
+        renderHelp ()
+        helpFrame.Visible <- true
+        helpFrame.SetFocus() |> ignore
+
+    let closeHelp () =
+        helpOpen <- false
+        helpFrame.Visible <- false
+
+        if confirmationOpen then
+            confirmationFrame.SetFocus() |> ignore
+        elif Presentation.ownsInput model then
+            context.SetFocus() |> ignore
+
+    let restoreProjectionChrome () =
+        guidance.Text <- projection.Actions
+        status.Text <- projection.Status
+        route.Text <- projection.Route
+        Theme.apply schemes.Success status
+
+    let showConfirmationChrome () =
+        guidance.Text <- currentActions ()
+        status.Text <- "Package changes are awaiting confirmation"
+        route.Text <- "Packages / Confirmation"
+        Theme.apply schemes.Warning status
+
+    let handleOwnedAction action =
+        if helpOpen then
+            match action with
+            | ShowHelp
+            | Back -> closeHelp ()
+            | _ -> ()
+        elif confirmationOpen then
+            match action with
+            | Activate ->
+                confirmationOpen <- false
+                confirmationFrame.Visible <- false
+                guidance.Text <- "? Help"
+                status.Text <- "Applying package changes..."
+                route.Text <- "Packages / Applying"
+                Theme.apply schemes.Warning status
+
+                match contentRoute () with
+                | OperationPreview(preview, _) -> dispatch (ConfirmPreview preview.Id)
+                | _ -> ()
+            | Back ->
+                confirmationOpen <- false
+                confirmationFrame.Visible <- false
+                restoreProjectionChrome ()
+            | ShowHelp -> openHelp ()
+            | _ -> ()
+        else
+            match model.Route, action with
+            | Failure(_, scope), Back -> dispatch (DismissFailure scope)
+            | _, ShowHelp -> openHelp ()
+            | _ -> ()
+
+    let handleUnowned (action: TerminalAction) =
         match action with
         | NextMode -> dispatch (ChangeMode(cycle modeOrder model.Mode 1))
         | PreviousMode -> dispatch (ChangeMode(cycle modeOrder model.Mode -1))
@@ -655,13 +814,6 @@ type ExplorerWindow
             sortFrame.Visible <- false
             dispatch (ChangeSort pendingSort)
             packageList.SetFocus() |> ignore
-        | Activate when confirmationOpen ->
-            confirmationOpen <- false
-            confirmationFrame.Visible <- false
-
-            match contentRoute () with
-            | OperationPreview(preview, _) -> dispatch (ConfirmPreview preview.Id)
-            | _ -> ()
         | Activate when search.HasFocus ->
             dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
             dispatch SubmitSearch
@@ -679,10 +831,13 @@ type ExplorerWindow
             match contentRoute () with
             | OperationPreview(preview, _) ->
                 confirmationOpen <- true
+                showConfirmationChrome ()
 
                 confirmationContents.Text <-
-                    $"# Apply this preview?\n\n{String.concat Environment.NewLine preview.Summary}"
-                    + "\n\nEnter confirms | Esc cancels"
+                    "Impact summary\n\n"
+                    + (preview.Summary
+                       |> List.map (fun summary -> $"- {summary}")
+                       |> String.concat Environment.NewLine)
 
                 confirmationFrame.Visible <- true
                 confirmationFrame.SetFocus() |> ignore
@@ -693,8 +848,16 @@ type ExplorerWindow
                     dispatch (ShowDetails package.Id))
         | Preview -> requestPreview ()
         | RefreshPackages -> dispatch Refresh
+        | ShowHelp -> openHelp ()
         | Back -> dismissOrCancel ()
         | Quit -> stop ()
+
+
+    let handle action =
+        if operationOwnsInput () || helpOpen then
+            handleOwnedAction action
+        else
+            handleUnowned action
 
     let handleKey key =
         let isTextInput = search.HasFocus || source.HasFocus
@@ -722,7 +885,12 @@ type ExplorerWindow
 
         match Keyboard.action key with
         | Some action when usesNativeActivation action -> ()
-        | Some action when not isTextInput || allowedWhileEditing action ->
+        | Some action when
+            operationOwnsInput ()
+            || helpOpen
+            || not isTextInput
+            || allowedWhileEditing action
+            ->
             handle action
             key.Handled <- true
         | _ -> ()
@@ -757,16 +925,19 @@ type ExplorerWindow
         contextFrame.Add context |> ignore
         sortFrame.Add sortContents |> ignore
         confirmationFrame.Add confirmationContents |> ignore
+        confirmationFrame.Add confirmationActions |> ignore
 
         this.Add modeFrame |> ignore
         this.Add searchFrame |> ignore
         this.Add listFrame |> ignore
         this.Add contextFrame |> ignore
-        this.Add help |> ignore
+        this.Add guidance |> ignore
         this.Add status |> ignore
         this.Add route |> ignore
         this.Add sortFrame |> ignore
         this.Add confirmationFrame |> ignore
+        helpFrame.Add helpContents |> ignore
+        this.Add helpFrame |> ignore
 
         Theme.apply schemes.Canvas this
         Theme.apply schemes.Section modeFrame
@@ -784,6 +955,8 @@ type ExplorerWindow
         Theme.apply schemes.Success status
         Theme.apply schemes.Section sortFrame
         Theme.apply schemes.Section confirmationFrame
+        Theme.apply schemes.Section helpFrame
+        Theme.apply schemes.Canvas helpContents
 
         packageList.SetSource rows
 
@@ -805,7 +978,7 @@ type ExplorerWindow
                 | Framework -> ()))
 
         packageList.ValueChanged.Add(fun args ->
-            if not rendering then
+            if not rendering && not (operationOwnsInput ()) && not helpOpen then
                 args.NewValue
                 |> Option.ofNullable
                 |> Option.bind (fun index -> model.Packages |> List.tryItem index)
@@ -813,36 +986,44 @@ type ExplorerWindow
 
         modeButtons
         |> List.iter (fun (mode, button) ->
-            button.Accepting.Add(fun _ -> dispatch (ChangeMode mode)))
+            button.Accepting.Add(fun _ ->
+                if not (operationOwnsInput ()) && not helpOpen then
+                    dispatch (ChangeMode mode)))
 
         detailsButton.Accepting.Add(fun _ ->
-            selectedPackage ()
-            |> Option.iter (fun package -> dispatch (ShowDetails package.Id)))
+            if not (operationOwnsInput ()) && not helpOpen then
+                selectedPackage ()
+                |> Option.iter (fun package -> dispatch (ShowDetails package.Id)))
 
         readmeButton.Accepting.Add(fun _ ->
-            selectedPackage ()
-            |> Option.iter (fun package -> dispatch (ShowReadme package.Id)))
+            if not (operationOwnsInput ()) && not helpOpen then
+                selectedPackage ()
+                |> Option.iter (fun package -> dispatch (ShowReadme package.Id)))
 
         previewButtons
         |> List.iter (fun (tab, button) ->
-            button.Accepting.Add(fun _ -> dispatch (SelectPreviewTab tab)))
+            button.Accepting.Add(fun _ ->
+                if not (operationOwnsInput ()) && not helpOpen then
+                    dispatch (SelectPreviewTab tab)))
 
         source.Accepting.Add(fun _ ->
-            let value =
-                if String.IsNullOrWhiteSpace source.Text then
-                    None
-                else
-                    Some(PackageSource(source.Text.Trim()))
+            if not (operationOwnsInput ()) && not helpOpen then
+                let value =
+                    if String.IsNullOrWhiteSpace source.Text then
+                        None
+                    else
+                        Some(PackageSource(source.Text.Trim()))
 
-            dispatch (SelectSource value)
-            dispatch SubmitSearch)
+                dispatch (SelectSource value)
+                dispatch SubmitSearch)
 
         search.Accepting.Add(fun _ ->
-            dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
-            dispatch SubmitSearch)
+            if not (operationOwnsInput ()) && not helpOpen then
+                dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
+                dispatch SubmitSearch)
 
         prerelease.ValueChanged.Add(fun args ->
-            if not rendering then
+            if not rendering && not (operationOwnsInput ()) && not helpOpen then
                 dispatch (ChangeSearch(search.Text, args.NewValue = CheckState.Checked))
                 dispatch SubmitSearch)
 

@@ -45,17 +45,24 @@ module private Driver =
 
 [<Sealed>]
 type AnsiDriverTests() =
-    let render width initial =
+    let renderWithKeys width height initial keys =
         use application = Application.Create().Init "ansi"
 
         application.Driver
         |> Option.ofObj
-        |> Option.iter (fun driver -> driver.SetScreenSize(width, 35))
+        |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
 
         application.StopAfterFirstIteration <- true
         use window = new ExplorerWindow(initial, ignore, application.RequestStop, Ansi16)
+        use _keyboard = window.BindKeyboard application.Keyboard
+
+        keys
+        |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
+
         application.Run window |> ignore
         Driver.text application.Driver
+
+    let render width initial = renderWithKeys width 35 initial []
 
     [<Fact>]
     member _.``Terminal Gui v2 instance host renders one bounded ANSI driver iteration``() =
@@ -85,6 +92,74 @@ type AnsiDriverTests() =
         let wide = render 160 details
         wide.Contains("Central.Package", StringComparison.Ordinal) |> should equal true
         wide.Contains("Versions", StringComparison.Ordinal) |> should equal true
+
+    [<Fact>]
+    member _.``wide and compact operation states keep lifecycle actions and failures visible``() =
+        let progress =
+            { Preview = preview.Id
+              Operation = OperationId "operation-1"
+              Completed = 3
+              Total = 4
+              Status = "Restoring projects" }
+
+        let failure =
+            { Scope = BackendSessionFailure
+              Kind = BackendUnavailable
+              Message = "Workspace Explorer is unavailable. Check the installed tool." }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let confirmation =
+                { model () with
+                    Route = Content(OperationPreview(preview, Summary)) }
+
+            let confirmationScreen =
+                renderWithKeys width height confirmation [ Key.L.WithCtrl; Key.Enter ]
+
+            confirmationScreen.Contains("Apply package changes?") |> should equal true
+            confirmationScreen.Contains("[Enter] Apply") |> should equal true
+            confirmationScreen.Contains("[Esc] Cancel") |> should equal true
+            confirmationScreen.Contains("[?] Help") |> should equal true
+
+            let applyingState =
+                { model () with
+                    Route = Content(OperationConfirmation preview)
+                    Pending.Apply = Some(RequestToken 20L) }
+
+            let applying = renderWithKeys width height applyingState []
+
+            applying.Contains("Applying changes for 2 packages.") |> should equal true
+            applying.Contains("? Help") |> should equal true
+            applying.Contains("Direct.Package") |> should equal false
+
+            let help = renderWithKeys width height applyingState [ Key '?' ]
+            help.Contains("Current actions") |> should equal true
+            help.Contains("? / Esc") |> should equal true
+            help.Contains("Close help") |> should equal true
+
+            let progressing =
+                { model () with
+                    Route = Content(OperationProgress progress)
+                    Pending.Apply = Some(RequestToken 20L) }
+                |> renderWithKeys width height
+                <| []
+
+            progressing.Contains("Current step: Restoring projects") |> should equal true
+            progressing.Contains("75%") |> should equal true
+            progressing.Contains("Completed 3 of 4 steps.") |> should equal true
+
+            let failed =
+                { model () with
+                    Route = Failure(PackageList, BackendSessionFailure)
+                    Failures = Map.ofList [ BackendSessionFailure, failure ] }
+                |> renderWithKeys width height
+                <| []
+
+            failed.Contains(failure.Message) |> should equal true
+            failed.Contains("Press Esc to dismiss this message.") |> should equal true
+            failed.Contains("Esc dismiss | ? Help") |> should equal true
+            failed.Contains("Ready") |> should equal false
+            failed.Contains("Direct.Package") |> should equal false)
 
     [<Fact>]
     member _.``live key events move focus and dispatch through the fixed window bindings``() =
