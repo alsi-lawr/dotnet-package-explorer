@@ -20,6 +20,16 @@ type ExplorerWindow
 
     let schemes = Theme.schemes profile
     let contentScheme = Scheme(schemes.Canvas, Code = schemes.Canvas.Normal)
+
+    let passiveContentScheme =
+        Scheme(
+            Normal = schemes.Canvas.Normal,
+            Focus = schemes.Canvas.Normal,
+            Active = schemes.Canvas.Normal,
+            Editable = schemes.Canvas.Normal,
+            Highlight = schemes.Canvas.Normal
+        )
+
     let rows = ObservableCollection<string>()
     let mutable model = initial
     let mutable projection = Presentation.project 160 initial
@@ -677,8 +687,7 @@ type ExplorerWindow
             prerelease.Y <- Pos.Absolute 0
 
             listFrame.X <- Pos.Absolute 0
-            let listPercentage = Presentation.listPercentage model
-            listFrame.Width <- Dim.Percent listPercentage
+            listFrame.Width <- Dim.Percent(Presentation.listPercentage model)
             contextFrame.X <- Pos.Right listFrame
             contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()
@@ -1308,7 +1317,7 @@ type ExplorerWindow
         Theme.apply schemes.Information listHeading
         Theme.apply schemes.Warning listNotice
         Theme.apply contentScheme context
-        Theme.apply contentScheme projectTable
+        Theme.apply passiveContentScheme projectTable
         Theme.apply schemes.Information searchLabel
         Theme.apply schemes.Information sourceLabel
         Theme.apply schemes.Section search
@@ -1347,6 +1356,7 @@ type ExplorerWindow
         projectTable.Style.ShowVerticalHeaderLines <- false
         projectTable.Style.ShowVerticalCellLineForFirstColumn <- false
         projectTable.Style.ShowVerticalCellLineForLastColumn <- false
+        projectTable.Style.HeaderScheme <- passiveContentScheme
 
         packageList.RowRender.Add(fun args ->
             model.Packages

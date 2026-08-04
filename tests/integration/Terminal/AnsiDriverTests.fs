@@ -43,6 +43,16 @@ module private Driver =
     let text driver =
         rows driver |> String.concat Environment.NewLine
 
+    let cells (driver: IDriver | null) =
+        let active = required driver
+
+        Array.init active.Rows (fun row ->
+            Array.init active.Cols (fun column ->
+                let value = cell driver row column
+                let attribute = value.Attribute.GetValueOrDefault()
+
+                value.Grapheme, attribute.Foreground.ToString(), attribute.Background.ToString()))
+
 [<Sealed>]
 type AnsiDriverTests() =
     let longPackage =
@@ -66,7 +76,49 @@ type AnsiDriverTests() =
             (Some "1.0.0")
             (Some "1.1.0")
 
-    let renderWithKeys width height initial keys =
+    let releasePackages =
+        [ package "Humanizer.Core" (Some Direct) (Some "2.8.26") (Some "3.0.10")
+          package "Newtonsoft.Json" (Some Direct) (Some "12.0.1") (Some "13.0.4")
+          package "Serilog.AspNetCore" (Some Central) (Some "8.0.3") (Some "9.0.0")
+          package "FSharp.Core" (Some Framework) (Some "10.1.302") (Some "10.1.302")
+          package
+              "Microsoft.Extensions.DependencyInjection"
+              (Some Transitive)
+              (Some "9.0.7")
+              (Some "10.0.0")
+          package "Terminal.Gui" (Some Direct) (Some "2.4.18") (Some "2.5.0")
+          package "Markdig" (Some Transitive) (Some "0.41.3") (Some "0.42.0")
+          package "MessagePack" (Some Central) (Some "3.1.8") (Some "3.2.0")
+          package "FsToolkit.ErrorHandling" (Some Direct) (Some "4.18.0") (Some "5.0.0")
+          package
+              "Microsoft.VisualStudio.SolutionPersistence"
+              (Some Transitive)
+              (Some "1.0.52")
+              (Some "1.1.0")
+          package "NuGet.Protocol" (Some Central) (Some "7.0.0") (Some "7.1.0")
+          package "Microsoft.Testing.Platform" (Some Transitive) (Some "1.7.3") (Some "2.0.0") ]
+
+    let releasePreview =
+        { preview with
+            Projects =
+                [ { Project = ProjectId "Application"
+                    Framework = Some(TargetFramework "net10.0")
+                    Before = Some(PackageVersion "2.8.26")
+                    After = Some(PackageVersion "3.0.10") }
+                  { Project = ProjectId "RpcClient"
+                    Framework = Some(TargetFramework "net9.0")
+                    Before = Some(PackageVersion "12.0.1")
+                    After = Some(PackageVersion "13.0.4") }
+                  { Project = ProjectId "Terminal"
+                    Framework = Some(TargetFramework "net10.0")
+                    Before = Some(PackageVersion "2.8.26")
+                    After = Some(PackageVersion "3.0.10") }
+                  { Project = ProjectId "Tests.Integration"
+                    Framework = Some(TargetFramework "net8.0")
+                    Before = Some(PackageVersion "12.0.1")
+                    After = Some(PackageVersion "13.0.4") } ] }
+
+    let renderBufferWithKeys profile width height initial keys =
         use application = Application.Create().Init "ansi"
 
         application.Driver
@@ -74,14 +126,17 @@ type AnsiDriverTests() =
         |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
 
         application.StopAfterFirstIteration <- true
-        use window = new ExplorerWindow(initial, ignore, application.RequestStop, Ansi16)
+        use window = new ExplorerWindow(initial, ignore, application.RequestStop, profile)
         use _keyboard = window.BindKeyboard application.Keyboard
 
         keys
         |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
 
         application.Run window |> ignore
-        Driver.rows application.Driver
+        Driver.rows application.Driver, Driver.cells application.Driver
+
+    let renderWithKeys width height initial keys =
+        renderBufferWithKeys Ansi16 width height initial keys |> fst
 
     let renderTextWithKeys width height initial keys =
         renderWithKeys width height initial keys |> String.concat Environment.NewLine
@@ -100,6 +155,7 @@ type AnsiDriverTests() =
         use _keyboard = window.BindKeyboard application.Keyboard
         let mutable frame = Drawing.Rectangle.Empty
         let mutable viewport = Drawing.Rectangle.Empty
+        let mutable parentViewport = Drawing.Rectangle.Empty
         let mutable scrolled = false
 
         application.Invoke(
@@ -114,6 +170,12 @@ type AnsiDriverTests() =
                 frame <- active.Frame
                 viewport <- active.Viewport
 
+                parentViewport <-
+                    active.SuperView
+                    |> Option.ofObj
+                    |> Option.map _.Viewport
+                    |> Option.defaultValue Drawing.Rectangle.Empty
+
                 if scrollRows > 0 then
                     scrolled <-
                         active.ScrollVertical(scrollRows).GetValueOrDefault()
@@ -123,7 +185,7 @@ type AnsiDriverTests() =
         )
 
         application.Run window |> ignore
-        frame, viewport, scrolled
+        frame, viewport, parentViewport, scrolled
 
     [<Fact>]
     member _.``Terminal Gui v2 instance host renders one bounded ANSI driver iteration``() =
@@ -166,17 +228,24 @@ type AnsiDriverTests() =
 
         centeredRoutes
         |> List.iter (fun initial ->
-            let wideFrame, wideViewport, _ = contextViewport 126 34 initial 0
-            wideFrame.X |> should be (greaterThan 0)
+            let wideFrame, wideViewport, wideParent, _ = contextViewport 126 34 initial 0
+
+            let leftMargin = wideFrame.X
+            let rightMargin = wideParent.Width - wideFrame.X - wideFrame.Width
+
+            abs (leftMargin - rightMargin) |> should be (lessThanOrEqualTo 1)
+            wideFrame.Width |> should equal (min 64 wideParent.Width)
             wideFrame.Y |> should be (greaterThan 2)
-            wideFrame.Width |> should equal 64
             wideFrame.Height |> should equal 12
             wideViewport.Width |> should be (lessThanOrEqualTo 64)
             wideViewport.Height |> should be (lessThanOrEqualTo 12)
 
-            let compactFrame, compactViewport, _ = contextViewport 90 30 initial 0
+            let compactFrame, compactViewport, compactParent, _ =
+                contextViewport 90 30 initial 0
+
             compactFrame.X |> should equal 0
             compactFrame.Y |> should equal 2
+            compactFrame.Width |> should equal compactParent.Width
             compactViewport.Width |> should be (greaterThan 64)
             compactViewport.Height |> should be (greaterThanOrEqualTo 12))
 
@@ -184,8 +253,8 @@ type AnsiDriverTests() =
             { model () with
                 Route = Content(PackageDetails direct.Id) }
 
-        let _, _, wideScrolled = contextViewport 126 34 details 4
-        let _, _, compactScrolled = contextViewport 90 30 details 4
+        let _, _, _, wideScrolled = contextViewport 126 34 details 4
+        let _, _, _, compactScrolled = contextViewport 90 30 details 4
         wideScrolled |> should equal true
         compactScrolled |> should equal true
 
@@ -198,19 +267,24 @@ type AnsiDriverTests() =
           { model () with
               Route = Content(OperationPreview(preview, Files)) } ]
         |> List.iter (fun initial ->
-            let wideFrame, wideViewport, _ = contextViewport 126 34 initial 0
-            wideFrame.X |> should equal 0
-            wideViewport.Width |> should be (greaterThan 64)
+            let wideFrame, wideViewport, wideParent, _ = contextViewport 126 34 initial 0
 
-            let compactFrame, compactViewport, _ = contextViewport 90 30 initial 0
+            wideFrame.X |> should equal 0
+            wideFrame.Width |> should equal wideParent.Width
+            wideViewport.Width |> should be (greaterThan 40)
+
+            let compactFrame, compactViewport, compactParent, _ =
+                contextViewport 90 30 initial 0
+
             compactFrame.X |> should equal 0
+            compactFrame.Width |> should equal compactParent.Width
             compactViewport.Width |> should be (greaterThan 64))
 
     [<Fact>]
     member _.``preview projects balance comparison columns without clipping identity``() =
         let projects =
             { model () with
-                Route = Content(OperationPreview(preview, Projects)) }
+                Route = Content(OperationPreview(releasePreview, Projects)) }
 
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
@@ -237,9 +311,70 @@ type AnsiDriverTests() =
 
             let screen = String.concat Environment.NewLine rows
 
-            [ "Web"; "net10.0"; "1.0.0"; "2.0.0" ]
+            [ "Tests.Integration"; "net8.0"; "12.0.1"; "13.0.4" ]
             |> List.iter (fun value ->
-                screen.Contains(value, StringComparison.Ordinal) |> should equal true))
+                screen.Contains(value, StringComparison.Ordinal) |> should equal true)
+
+            let focusedRows, focusedCells =
+                renderBufferWithKeys MidnightViolet width height projects [ Key.L.WithCtrl ]
+
+            let focusedHeaderRow =
+                focusedRows
+                |> List.findIndex (fun row ->
+                    [ "Project"; "Framework"; "Current"; "Proposed" ]
+                    |> List.forall (fun heading ->
+                        row.Contains(heading, StringComparison.Ordinal)))
+
+            let focusedHeader = focusedRows[focusedHeaderRow]
+            let focusedProject = focusedHeader.IndexOf("Project", StringComparison.Ordinal)
+
+            let _, headerForeground, headerBackground =
+                focusedCells[focusedHeaderRow][focusedProject]
+
+            headerForeground |> should equal "White"
+            headerBackground |> should equal "Black"
+
+            focusedCells[focusedHeaderRow]
+            |> Array.skip focusedProject
+            |> Array.take (width - 2 - focusedProject)
+            |> Array.iter (fun (_, _, background) -> background |> should equal "Black")
+
+            let applicationRow =
+                focusedRows
+                |> List.findIndex (_.Contains("Application", StringComparison.Ordinal))
+
+            let applicationColumn =
+                focusedRows[applicationRow].IndexOf("Application", StringComparison.Ordinal)
+
+            let _, applicationForeground, applicationBackground =
+                focusedCells[applicationRow][applicationColumn]
+
+            applicationForeground |> should equal "White"
+            applicationBackground |> should equal "Black")
+
+    [<Fact>]
+    member _.``wide retained context keeps the full release package identities``() =
+        let routes =
+            [ PackageDetails direct.Id
+              OperationPreview(preview, Summary)
+              OperationPreview(preview, Dependencies)
+              OperationPreview(preview, Projects) ]
+
+        routes
+        |> List.iter (fun route ->
+            let initial =
+                { model () with
+                    Packages = releasePackages
+                    ActivePackage = Some releasePackages.Head.Id
+                    Route = Content route }
+
+            let screen = renderTextWithKeys 126 34 initial []
+
+            [ dependencyInjection.DisplayName; solutionPersistence.DisplayName ]
+            |> List.iter (fun packageId ->
+                if not (screen.Contains(packageId, StringComparison.Ordinal)) then
+                    failwith
+                        $"Retained {route} context clipped {packageId}.{Environment.NewLine}{screen}"))
 
     [<Fact>]
     member _.``compact routes reserve one guidance row and one combined status route row``() =

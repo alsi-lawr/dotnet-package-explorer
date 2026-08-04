@@ -31,7 +31,7 @@ module internal Presentation =
     let WideListPercentage = 65
 
     [<Literal>]
-    let WideContextListPercentage = 45
+    let WideRetainedListPercentage = 60
 
     let width columns =
         if columns < NarrowBoundary then Narrow else Wide
@@ -44,7 +44,7 @@ module internal Presentation =
 
         match route with
         | PackageList -> WideListPercentage
-        | _ -> WideContextListPercentage
+        | _ -> WideRetainedListPercentage
 
     let packageId (PackageId value) = value
 
