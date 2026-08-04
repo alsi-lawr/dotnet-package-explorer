@@ -18,5 +18,8 @@
             Path="tests/unit/Application/Dotnet.PackageExplorer.Application.UnitTests.fsproj"
         />
         <Project Path="tests/unit/Foundation/Dotnet.PackageExplorer.Foundation.UnitTests.fsproj" />
+        <Project
+            Path="tests/unit/RpcClient/Dotnet.PackageExplorer.RpcClient.UnitTests.fsproj"
+        />
     </Folder>
 </Solution>

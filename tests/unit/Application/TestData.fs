@@ -33,7 +33,14 @@ module TestData =
     let browsePackage = package "Browse.Package" "Browse" None (Some 1.0)
 
     let snapshot packages =
-        { Packages = packages
+        { Items =
+            packages
+            |> List.map (fun package ->
+                { Target =
+                    { Project = ProjectId "App"
+                      Framework = Some(TargetFramework "net10.0")
+                      Runtime = None }
+                  Package = package })
           CapturedAt = DateTimeOffset(2026, 8, 3, 20, 0, 0, TimeSpan.Zero) }
 
     let model target installed =

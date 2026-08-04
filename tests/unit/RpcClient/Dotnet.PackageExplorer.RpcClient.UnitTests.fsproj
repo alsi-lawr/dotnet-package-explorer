@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <OutputType>Exe</OutputType>
+        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+        <AssemblyName>Dotnet.PackageExplorer.RpcClient.UnitTests</AssemblyName>
+        <RootNamespace>Dotnet.PackageExplorer.RpcClient.UnitTests</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="ProtocolFixtureTests.fs" />
+        <Compile Include="ProcessSessionTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="../../Fixtures/PackageRpc/**/*.mpack">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>Fixtures/PackageRpc/%(RecursiveDir)%(Filename)%(Extension)</Link>
+        </None>
+        <None Include="../../Fixtures/PackageRpc/package-v1.schema.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>Fixtures/PackageRpc/package-v1.schema.json</Link>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference
+            Include="../../../src/RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj"
+        />
+        <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="FsUnit.Xunit" />
+        <PackageReference Include="xunit.v3" />
+    </ItemGroup>
+</Project>

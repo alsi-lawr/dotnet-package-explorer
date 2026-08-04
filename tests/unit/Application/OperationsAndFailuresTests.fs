@@ -75,6 +75,7 @@ type OperationsAndFailuresTests() =
 
         let progress =
             { Preview = expectedPreview.Id
+              Operation = OperationId "operation-1"
               Completed = 1
               Total = 2
               Status = "Restoring" }

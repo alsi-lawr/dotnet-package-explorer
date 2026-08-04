@@ -103,7 +103,10 @@ module Update =
         | Browse -> []
         | Installed
         | Updates
-        | Consolidate -> model.Installed |> Option.map _.Packages |> Option.defaultValue []
+        | Consolidate ->
+            model.Installed
+            |> Option.map InstalledSnapshot.packages
+            |> Option.defaultValue []
 
     let private projectSelectedVersion selectedVersions operation =
         let selected package current =
@@ -157,7 +160,8 @@ module Update =
                 | Browse -> []
                 | Installed
                 | Updates
-                | Consolidate -> installed |> Option.map _.Packages |> Option.defaultValue []
+                | Consolidate ->
+                    installed |> Option.map InstalledSnapshot.packages |> Option.defaultValue []
 
             let next =
                 { model with
@@ -283,7 +287,10 @@ module Update =
                 | Browse -> model.Packages
                 | Installed
                 | Updates
-                | Consolidate -> PackageSort.apply model.Mode model.Sort snapshot.Packages
+                | Consolidate ->
+                    snapshot
+                    |> InstalledSnapshot.packages
+                    |> PackageSort.apply model.Mode model.Sort
 
             { model with
                 Installed = Some snapshot
@@ -494,7 +501,10 @@ module Update =
                 | Browse -> model.Packages
                 | Installed
                 | Updates
-                | Consolidate -> PackageSort.apply model.Mode model.Sort result.Installed.Packages
+                | Consolidate ->
+                    result.Installed
+                    |> InstalledSnapshot.packages
+                    |> PackageSort.apply model.Mode model.Sort
 
             { model with
                 Installed = Some result.Installed

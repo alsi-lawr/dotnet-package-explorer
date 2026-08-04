@@ -5,7 +5,16 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="AssemblyInfo.fs" />
+        <Compile Include="Protocol.fs" />
+        <Compile Include="PackageMapping.fs" />
+        <Compile Include="ProcessSession.fs" />
+        <Compile Include="Client.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="../Application/Dotnet.PackageExplorer.Application.fsproj" />
         <PackageReference Include="FSharp.Core" />
+        <PackageReference Include="MessagePack" />
     </ItemGroup>
 </Project>

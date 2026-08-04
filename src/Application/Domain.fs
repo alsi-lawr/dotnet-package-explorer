@@ -6,9 +6,26 @@ type PackageVersion = PackageVersion of string
 
 type PackageSource = PackageSource of string
 
+type PackageSourceAvailability =
+    | Available
+    | Disabled
+    | SourceAuthenticationRequired
+    | Unavailable
+
+type PackageSourceInfo =
+    { Id: PackageSource
+      Name: string
+      Location: string
+      Availability: PackageSourceAvailability }
+
 type ProjectId = ProjectId of string
 
 type TargetFramework = TargetFramework of string
+
+type PackageTargetIdentity =
+    { Project: ProjectId
+      Framework: TargetFramework option
+      Runtime: string option }
 
 type RequestToken = RequestToken of int64
 
@@ -180,9 +197,47 @@ type SearchPage =
       Packages: PackageSummary list
       HasNextPage: bool }
 
+type InstalledPackage =
+    { Target: PackageTargetIdentity
+      Package: PackageSummary }
+
 type InstalledSnapshot =
-    { Packages: PackageSummary list
+    { Items: InstalledPackage list
       CapturedAt: System.DateTimeOffset }
+
+[<RequireQualifiedAccess>]
+module InstalledSnapshot =
+    let packages snapshot =
+        snapshot.Items |> List.map _.Package |> List.distinctBy _.Id
+
+type PackageSourceMappingKind =
+    | ApplyAllowed
+    | KnownConflict
+    | InsufficientTransitiveEvidence
+
+type PackageSourceMapping =
+    { Kind: PackageSourceMappingKind
+      Package: PackageId option
+      Sources: PackageSource list }
+
+type PackageUpdate =
+    { Package: PackageId
+      Target: PackageTargetIdentity
+      InstalledVersion: PackageVersion option
+      AvailableVersions: PackageVersion list }
+
+type PackageUpdatesPage =
+    { Updates: PackageUpdate list
+      Continuation: string option }
+
+type PackageConsolidation =
+    { Package: PackageId
+      CurrentVersions: (PackageVersion * PackageTargetIdentity list) list
+      CandidateVersions: PackageVersion list }
+
+type PackageConsolidationPage =
+    { Packages: PackageConsolidation list
+      Continuation: string option }
 
 type TargetSelection =
     { Projects: Set<ProjectId>
@@ -225,8 +280,11 @@ type PreviewTab =
     | Dependencies
     | Files
 
+type OperationId = OperationId of string
+
 type OperationProgress =
     { Preview: PreviewId
+      Operation: OperationId
       Completed: int
       Total: int
       Status: string }
@@ -236,12 +294,24 @@ type OperationResult =
       Installed: InstalledSnapshot
       Summary: string }
 
+type RecoveryState =
+    | Completed
+    | Compensated
+    | Unchanged
+    | Uncertain
+
+type RecoveryEntry =
+    { Package: PackageId
+      Target: PackageTargetIdentity
+      State: RecoveryState }
+
 type FailureKind =
     | AuthenticationRequired of PackageSource option
     | BackendUnavailable
     | BackendIncompatible of string
     | BackendExited of exitCode: int option
     | Cancelled
+    | PartialRecoveryRequired of RecoveryEntry list
     | Rejected of string
 
 type FailureScope =
@@ -255,6 +325,12 @@ type ApplicationFailure =
     { Scope: FailureScope
       Kind: FailureKind
       Message: string }
+
+type PackageExplorerEvent =
+    | InstalledRefreshed of RequestToken * InstalledSnapshot
+    | RestoreProgressed of RequestToken
+    | RestoreCompleted of RequestToken * Result<unit, ApplicationFailure>
+    | OperationProgressed of RequestToken * OperationProgress
 
 type RequestKind =
     | SearchRequest

@@ -133,7 +133,9 @@ module Model =
         (installed: InstalledSnapshot option)
         =
         let mode = Installed
-        let packages = installed |> Option.map _.Packages |> Option.defaultValue []
+
+        let packages =
+            installed |> Option.map InstalledSnapshot.packages |> Option.defaultValue []
 
         let model =
             { Mode = mode

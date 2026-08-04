@@ -10,7 +10,17 @@ type ClientPortTests() =
     [<Fact>]
     member _.``the application-owned client port can be implemented with pure F# results``() =
         let client =
-            { Search =
+            { Sources = fun _ -> async { return Ok [] }
+              SourceMapping =
+                fun _ ->
+                    async {
+                        return
+                            Ok
+                                { Kind = ApplyAllowed
+                                  Package = None
+                                  Sources = [] }
+                    }
+              Search =
                 fun request ->
                     async {
                         return
@@ -20,6 +30,9 @@ type ClientPortTests() =
                                   HasNextPage = false }
                     }
               RefreshInstalled = fun _ -> async { return Ok(snapshot [ directPackage ]) }
+              FindUpdates = fun _ -> async { return Ok { Updates = []; Continuation = None } }
+              FindConsolidation =
+                fun _ -> async { return Ok { Packages = []; Continuation = None } }
               GetDetails = fun _ -> async { return Ok(details directPackage) }
               GetReadme =
                 fun request ->
@@ -40,6 +53,10 @@ type ClientPortTests() =
                                   Summary = "Applied" }
                     }
               Cancel = fun _ -> async { return Ok() }
+              Subscribe =
+                fun _ ->
+                    { new System.IDisposable with
+                        member _.Dispose() = () }
               Close = fun () -> async { return () } }
 
         let query =
