@@ -42,5 +42,6 @@ jobs:
         working-directory: tests/integration/RpcClient/bin/Debug/net10.0
         run: dotnet Dotnet.PackageExplorer.RpcClient.IntegrationTests.dll --fail-skips on
       - name: Run terminal integration tests
+        shell: bash
         working-directory: tests/integration/Terminal/bin/Debug/net10.0
         run: dotnet Dotnet.PackageExplorer.Terminal.IntegrationTests.dll --fail-skips on
