@@ -220,6 +220,92 @@ type AnsiDriverTests() =
             failed.Contains("Direct.Package") |> should equal false)
 
     [<Fact>]
+    member _.``wide and compact content keeps target guidance ranges and impact meaning visible``
+        ()
+        =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let target =
+                { model () with
+                    Route = Content(PackageTargeting direct.Id)
+                    Focus = ProjectRow(ProjectId "Web")
+                    TargetSelection =
+                        { Projects = Set.singleton (ProjectId "Web")
+                          Frameworks =
+                            Map.ofList
+                                [ ProjectId "Web",
+                                  Set.ofList
+                                      [ TargetFramework "net10.0"; TargetFramework "net9.0" ] ] } }
+                |> renderWithKeys width height
+                <| [ Key.L.WithCtrl ]
+
+            target.Contains("Workspace Explorer / Packages") |> should equal true
+            target.Contains("[>] [x] Web") |> should equal true
+            target.Contains("[x] net10.0") |> should equal true
+            target.Contains("j/k move") |> should equal true
+            target.Contains("Space select project and all frameworks") |> should equal true
+            target.Contains("p preview") |> should equal true
+
+            let targetRows = target.Split Environment.NewLine
+
+            let projectRow = targetRows |> Array.findIndex (_.Contains("[>] [x] Web"))
+
+            let frameworkRow = targetRows |> Array.findIndex (_.Contains("[x] net10.0"))
+
+            frameworkRow |> should be (greaterThan projectRow)
+
+            targetRows[frameworkRow].IndexOf("[x] net10.0", StringComparison.Ordinal)
+            |> should
+                be
+                (greaterThan (
+                    targetRows[projectRow].IndexOf("[>] [x] Web", StringComparison.Ordinal)
+                ))
+
+            let dependencyPreview =
+                { model () with
+                    Route = Content(OperationPreview(preview, Dependencies)) }
+                |> renderWithKeys width height
+                <| [ Key.L.WithCtrl ]
+
+            dependencyPreview.Contains("Dependency [4.3.0,)") |> should equal true
+            dependencyPreview.Contains("Dependency impact") |> should equal false
+
+            let filePreview =
+                { model () with
+                    Route = Content(OperationPreview(preview, Files)) }
+                |> renderWithKeys width height
+                <| [ Key.L.WithCtrl ]
+
+            filePreview.Contains("Changed: src/Web/Web.fsproj") |> should equal true
+            filePreview.Contains("Changed: src/Worker/Worker.fsproj") |> should equal true)
+
+    [<Fact>]
+    member _.``wide and compact README retain trailing prose and fenced code content``() =
+        let readme =
+            """# Direct.Package
+
+This README prose is intentionally long enough to wrap without losing its trailing prose-tail.
+
+```console
+dotnet add package Direct.Package --source https://api.nuget.org/v3/index.json --framework net10.0 --property command-tail
+```"""
+
+        let initial =
+            { model () with
+                Route = Content(PackageReadme direct.Id)
+                Readmes =
+                    Map.ofList
+                        [ direct.Id,
+                          { Package = direct.Id
+                            CommonMark = readme } ] }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let screen = renderWithKeys width height initial [ Key.L.WithCtrl ]
+            screen.Contains("prose-tail") |> should equal true
+            screen.Contains("command-tail") |> should equal true)
+
+    [<Fact>]
     member _.``live key events move focus and dispatch through the fixed window bindings``() =
         use application = Application.Create().Init "ansi"
 

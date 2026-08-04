@@ -142,15 +142,13 @@ type InteractionTests() =
                 Route = Content(PackageTargeting direct.Id)
                 Focus = ProjectRow(ProjectId "Web") }
 
-        run initial [ Key.J ]
-        |> should contain (SetFocus(ProjectRow(ProjectId "Worker")))
+        let messages = run initial [ Key.J; Key.L.WithCtrl; Key.Space; Key.P ]
 
-        let next =
-            { initial with
-                Focus = ProjectRow(ProjectId "Worker") }
+        messages |> should contain (SetFocus(ProjectRow(ProjectId "Worker")))
+        messages |> should contain (SetProjectSelection(ProjectId "Worker", true))
 
-        run next [ Key.H.WithCtrl; Key.Space ]
-        |> should contain (SetProjectSelection(ProjectId "Worker", true))
+        messages
+        |> should contain (RequestPreview(UpdateSelectedPackages(Set.singleton direct.Id)))
 
     [<Fact>]
     member _.``Escape cancels the visible pending request before dismissing content``() =

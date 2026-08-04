@@ -14,6 +14,7 @@ type ExplorerWindow
     inherit Window()
 
     let schemes = Theme.schemes profile
+    let contentScheme = Scheme(schemes.Canvas, Code = schemes.Canvas.Normal)
     let rows = ObservableCollection<string>()
     let mutable model = initial
     let mutable projection = Presentation.project 160 initial
@@ -150,7 +151,8 @@ type ExplorerWindow
             Width = Dim.Fill(),
             Height = Dim.Fill 2,
             BorderStyle = LineStyle.None,
-            ShowHeadingPrefix = false
+            ShowHeadingPrefix = false,
+            ShowCopyButtons = false
         )
 
     let contextButton x width title =
@@ -293,6 +295,87 @@ type ExplorerWindow
     let operationOwnsInput () =
         confirmationOpen || Presentation.ownsInput model
 
+    let readmeCodeWidth columns =
+        match Presentation.width columns with
+        | Narrow -> max 20 (columns - 8)
+        | Wide -> max 20 (columns - (columns * 45 / 100) - 8)
+
+    let wrapCodeLine width (line: string) =
+        let rec wrap (remaining: string) =
+            if remaining.Length <= width then
+                [ remaining ]
+            else
+                let whitespace = remaining.LastIndexOfAny([| ' '; '\t' |], width - 1, width)
+
+                let take = if whitespace > 0 then whitespace + 1 else width
+                remaining[.. take - 1] :: wrap remaining[take..]
+
+        wrap line
+
+    let fencedReadme columns (source: string) =
+        let fence (line: string) =
+            let candidate = line.TrimStart()
+            let indent = line.Length - candidate.Length
+
+            if indent <= 3 && candidate.Length >= 3 then
+                let marker = candidate[0]
+
+                if marker = '`' || marker = '~' then
+                    let length = candidate |> Seq.takeWhile ((=) marker) |> Seq.length
+
+                    if length >= 3 then
+                        Some(marker, length, candidate[length..])
+                    else
+                        None
+                else
+                    None
+            else
+                None
+
+        let closes (marker, length) line =
+            match fence line with
+            | Some(candidateMarker, candidateLength, remainder) ->
+                candidateMarker = marker
+                && candidateLength >= length
+                && String.IsNullOrWhiteSpace remainder
+            | None -> false
+
+        let width = readmeCodeWidth columns
+
+        let lines =
+            source.Split('\n')
+            |> Array.fold
+                (fun (activeFence, rendered) line ->
+                    match activeFence with
+                    | Some current when closes current line -> None, line :: rendered
+                    | Some current ->
+                        Some current, (wrapCodeLine width line |> List.rev) @ rendered
+                    | None ->
+                        match fence line with
+                        | Some(marker, length, _) -> Some(marker, length), line :: rendered
+                        | None -> None, line :: rendered)
+                (None, [])
+            |> snd
+            |> List.rev
+
+        String.concat "\n" lines
+
+    let contextText columns =
+        match model.Route with
+        | Content(PackageReadme _) -> fencedReadme columns projection.Context
+        | Content _
+        | Failure _ -> projection.Context
+
+    let updateContextText columns =
+        let next = contextText columns
+
+        if context.Text <> next then
+            let oldViewport = context.Viewport
+            context.Text <- next
+
+            if oldViewport.Height > 0 then
+                context.Viewport <- oldViewport
+
     let currentActions () =
         if confirmationOpen then
             "Enter apply | Esc cancel | ? Help"
@@ -398,7 +481,12 @@ type ExplorerWindow
 
     let setLayout width =
         let narrow = Presentation.width width = Narrow
-        let showContext = narrow && narrowContext && projection.Route <> "List"
+
+        let showContext =
+            match contentRoute () with
+            | PackageList -> false
+            | _ -> narrow && narrowContext
+
         let operation = Presentation.ownsInput model
 
         modeFrame.Visible <- not operation
@@ -594,13 +682,7 @@ type ExplorerWindow
         contextFrame.Title <- projection.ContextTitle
         updateRows projection
         updateListState projection
-
-        if context.Text <> projection.Context then
-            let oldViewport = context.Viewport
-            context.Text <- projection.Context
-
-            if oldViewport.Height > 0 then
-                context.Viewport <- oldViewport
+        updateContextText this.Viewport.Width
 
         status.Text <- projection.Status
         route.Text <- projection.Route
@@ -627,10 +709,10 @@ type ExplorerWindow
             || model.Pending.Search.IsSome
             ->
             Theme.apply schemes.Warning status
-            Theme.apply schemes.Canvas context
+            Theme.apply contentScheme context
         | _ ->
             Theme.apply schemes.Success status
-            Theme.apply schemes.Canvas context
+            Theme.apply contentScheme context
 
         let nextContent = contentRoute ()
 
@@ -990,7 +1072,7 @@ type ExplorerWindow
         Theme.apply schemes.Canvas packageList
         Theme.apply schemes.Information listHeading
         Theme.apply schemes.Warning listNotice
-        Theme.apply schemes.Canvas context
+        Theme.apply contentScheme context
         Theme.apply schemes.Information searchLabel
         Theme.apply schemes.Information sourceLabel
         Theme.apply schemes.Section search
@@ -1088,6 +1170,7 @@ type ExplorerWindow
             listFrame.Title <- projection.ListTitle
             updateRows projection
             updateListState projection
+            updateContextText this.Viewport.Width
             setLayout this.Viewport.Width
             rendering <- wasRendering)
 

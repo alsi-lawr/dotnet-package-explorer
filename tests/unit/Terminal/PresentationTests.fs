@@ -142,7 +142,7 @@ type PresentationTests() =
 
             actual.Width |> should equal Wide
             actual.Rows |> should haveLength 2
-            actual.Route |> should startWith "Preview /"
+            actual.Route |> should startWith "Packages /"
             actual.Context |> should not' (be EmptyString))
 
     [<Fact>]
@@ -155,8 +155,71 @@ type PresentationTests() =
             |> Presentation.project 80
 
         actual.Width |> should equal Narrow
-        actual.Route |> should equal "README"
+        actual.ContextTitle |> should equal "Workspace Explorer / Packages"
+        actual.Route |> should equal "Packages / README"
         actual.Context |> should equal "# Direct.Package\n\nREADME body."
+
+    [<Fact>]
+    member _.``targets show project parents framework children and complete local instructions``() =
+        [ 126; 90 ]
+        |> List.iter (fun columns ->
+            let initial =
+                { model () with
+                    Route = Content(PackageTargeting direct.Id)
+                    Focus = ProjectRow(ProjectId "Web")
+                    TargetSelection =
+                        { Projects = Set.singleton (ProjectId "Web")
+                          Frameworks =
+                            Map.ofList
+                                [ ProjectId "Web",
+                                  Set.ofList
+                                      [ TargetFramework "net10.0"; TargetFramework "net9.0" ] ] } }
+
+            let actual = Presentation.project columns initial
+
+            actual.ContextTitle |> should equal "Workspace Explorer / Packages"
+            actual.Route |> should equal "Packages / Targets"
+            actual.Context.Contains("Web") |> should equal true
+            actual.Context.Contains("net10.0") |> should equal true
+            actual.Context.Contains("net9.0") |> should equal true
+            actual.Context.Contains("Worker") |> should equal true
+            actual.Context.Contains("j/k move") |> should equal true
+
+            actual.Context.Contains("Space select project and all frameworks")
+            |> should equal true
+
+            actual.Context.Contains("p preview") |> should equal true)
+
+    [<Fact>]
+    member _.``details and previews preserve literal ranges and distinguish impacted files``() =
+        [ 126; 90 ]
+        |> List.iter (fun columns ->
+            let details =
+                { model () with
+                    Route = Content(PackageDetails direct.Id) }
+                |> Presentation.project columns
+
+            details.ContextTitle |> should equal "Workspace Explorer / Packages"
+            details.Route |> should equal "Packages / Details"
+            details.Context.Contains("# Direct.Package") |> should equal false
+
+            let dependencies =
+                { model () with
+                    Route = Content(OperationPreview(preview, Dependencies)) }
+                |> Presentation.project columns
+
+            dependencies.ContextTitle |> should equal "Workspace Explorer / Packages"
+            dependencies.Route |> should equal "Packages / Dependencies"
+            dependencies.Context.Contains("# Dependency impact") |> should equal false
+
+            let files =
+                { model () with
+                    Route = Content(OperationPreview(preview, Files)) }
+                |> Presentation.project columns
+
+            files.Route |> should equal "Packages / Files"
+            files.Context.Contains("- Changed: src/Web/Web.fsproj") |> should equal true
+            files.Context.Split("Changed:").Length - 1 |> should equal preview.Files.Length)
 
     [<Fact>]
     member _.``operation routes expose safe actions and observable apply progress``() =

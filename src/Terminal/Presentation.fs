@@ -287,6 +287,9 @@ module internal Presentation =
         | PackageFailure _
         | ProjectFailure _ -> false
 
+    let private markdownLiteral (value: string) =
+        value.Replace("\\", "\\\\").Replace("[", "\\[").Replace("]", "\\]")
+
     let private detailsMarkdown (model: Model) (package: PackageId) =
         match Map.tryFind package model.Details with
         | None -> "Loading package details..."
@@ -303,7 +306,7 @@ module internal Presentation =
             let dependencies =
                 details.Dependencies
                 |> List.map (fun dependency ->
-                    $"- {packageId dependency.Id} {dependency.VersionRange}")
+                    $"- {packageId dependency.Id} {markdownLiteral dependency.VersionRange}")
                 |> String.concat Environment.NewLine
 
             let deprecated =
@@ -312,19 +315,17 @@ module internal Presentation =
                 else
                     "Supported"
 
-            $"""# {details.Package.DisplayName}
+            $"""**Package:** {details.Package.DisplayName}
 
 {summary}
 
-**State:** {packageKind details.Package.Kind}
+**Relationship:** {packageKind details.Package.Kind} | **Status:** {deprecated}
 
-**Package status:** {deprecated}
-
-## Versions
+### Versions
 
 {versions}
 
-## Dependencies
+### Dependencies
 
 {dependencies}"""
 
@@ -334,16 +335,30 @@ module internal Presentation =
         | None -> "Loading package README..."
 
     let private targetingMarkdown (model: Model) (package: PackageId) =
-        let selected (project: ProjectTarget) =
+        let projectSelected (project: ProjectTarget) =
             if model.TargetSelection.Projects.Contains project.Id then
-                "[x]"
+                "\\[x\\]"
             else
-                "[ ]"
+                "\\[ \\]"
 
         let focused (project: ProjectTarget) =
             match model.Focus with
-            | ProjectRow projectId when projectId = project.Id -> ">"
-            | _ -> " "
+            | ProjectRow projectId when projectId = project.Id -> "\\[>\\]"
+            | _ -> "\\[ \\]"
+
+        let frameworkSelected (project: ProjectTarget) framework =
+            let explicitlySelected =
+                model.TargetSelection.Frameworks
+                |> Map.tryFind project.Id
+                |> Option.map (fun selectedFrameworks -> selectedFrameworks.Contains framework)
+
+            if
+                explicitlySelected
+                |> Option.defaultValue (model.TargetSelection.Projects.Contains project.Id)
+            then
+                "\\[x\\]"
+            else
+                "\\[ \\]"
 
         let projects =
             model.Target
@@ -351,23 +366,31 @@ module internal Presentation =
             |> List.collect (fun project ->
                 let frameworks =
                     match project.Frameworks with
-                    | [] -> [ "(default)" ]
-                    | values -> values |> List.map (fun (TargetFramework framework) -> framework)
+                    | [] -> [ None, "(default)" ]
+                    | values ->
+                        values
+                        |> List.map (fun framework ->
+                            let (TargetFramework name) = framework
+                            Some framework, name)
 
-                frameworks
-                |> List.map (fun framework ->
-                    $"| {focused project} {selected project} {project.Name} | {framework} |"))
+                $"- {focused project} {projectSelected project} **{project.Name}**"
+                :: (frameworks
+                    |> List.map (fun (framework, name) ->
+                        let selected =
+                            framework
+                            |> Option.map (frameworkSelected project)
+                            |> Option.defaultValue (projectSelected project)
+
+                        $"  - {selected} {name}")))
             |> String.concat Environment.NewLine
 
-        $"""# {packageId package}
+        $"""**Package:** {packageId package}
 
-## Projects and frameworks
+j/k move | Space select project and all frameworks | p preview
 
-| Project | Framework |
-| --- | --- |
-{projects}
+\[>\] focused | \[x\] selected
 
-Use j/k to choose a project. Space selects it and its frameworks. Press p to preview."""
+{projects}"""
 
     let private previewMarkdown (preview: OperationPreview) tab =
         match tab with
@@ -375,7 +398,6 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
             preview.Summary
             |> List.map (fun line -> $"- {line}")
             |> String.concat Environment.NewLine
-            |> fun value -> "# Summary\n\n" + value
         | Projects ->
             let projects =
                 preview.Projects
@@ -391,21 +413,18 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
                     + $"{packageVersion project.After} |")
                 |> String.concat Environment.NewLine
 
-            $"""# Project and framework impact
-
-| Project | Framework | Current | Proposed |
+            $"""| Project | Framework | Current | Proposed |
 | --- | --- | --- | --- |
 {projects}"""
         | Dependencies ->
             preview.Dependencies
-            |> List.map (fun dependency -> $"- {packageId dependency.Id} {dependency.VersionRange}")
+            |> List.map (fun dependency ->
+                $"- {packageId dependency.Id} {markdownLiteral dependency.VersionRange}")
             |> String.concat Environment.NewLine
-            |> fun value -> "# Dependency impact\n\n" + value
         | Files ->
             preview.Files
-            |> List.map (fun path -> $"- `{path}`")
+            |> List.map (fun path -> $"- Changed: {path}")
             |> String.concat Environment.NewLine
-            |> fun value -> "# File impact\n\n" + value
 
     let private content (model: Model) =
         let contentRoute, failure =
@@ -432,29 +451,35 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
             | PackageList ->
                 match model.ActivePackage with
                 | Some package ->
-                    packageId package, detailsMarkdown model package, packageActions, "List"
+                    "Workspace Explorer / Packages",
+                    detailsMarkdown model package,
+                    packageActions,
+                    "Packages / List"
                 | None when List.isEmpty model.Packages ->
-                    "Package details",
+                    "Workspace Explorer / Packages",
                     "Package information will appear here when results are available.",
                     packageActions,
-                    "List"
+                    "Packages / List"
                 | None ->
-                    "Package details",
+                    "Workspace Explorer / Packages",
                     "Select a package and press Enter to open its details.",
                     packageActions,
-                    "List"
+                    "Packages / List"
             | PackageDetails package ->
-                packageId package, detailsMarkdown model package, packageActions, "Details"
+                "Workspace Explorer / Packages",
+                detailsMarkdown model package,
+                packageActions,
+                "Packages / Details"
             | PackageReadme package ->
-                packageId package + " | README",
+                "Workspace Explorer / Packages",
                 readmeMarkdown model package,
                 packageActions,
-                "README"
+                "Packages / README"
             | PackageTargeting package ->
-                packageId package + " | Targets",
+                "Workspace Explorer / Packages",
                 targetingMarkdown model package,
                 packageActions,
-                "Targets"
+                "Packages / Targets"
             | OperationPreview(preview, tab) ->
                 let tabName =
                     match tab with
@@ -463,10 +488,10 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
                     | Dependencies -> "Dependencies"
                     | Files -> "Files"
 
-                "Preview | " + tabName,
+                "Workspace Explorer / Packages",
                 previewMarkdown preview tab,
                 packageActions,
-                "Preview / " + tabName
+                "Packages / " + tabName
             | OperationConfirmation preview ->
                 let count = operationPackageCount preview.Operation
                 let packages = packageCountText count
