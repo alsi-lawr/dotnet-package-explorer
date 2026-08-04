@@ -93,43 +93,68 @@ type PresentationTests() =
         actual.Rows[1].Contains("Central") |> should equal true
 
     [<Fact>]
-    member _.``empty and pending lists explain recovery and stale package actions``() =
-        let browse =
-            { model () with
-                Mode = Browse
-                Query.Text = "missing"
-                Packages = []
-                ActivePackage = None }
+    member _.``empty package modes expose only their available recovery actions``() =
+        let emptyModes =
+            [ Browse, "Tab/1-4 modes | / search | ? Help", "No packages found"
+              Installed, "1 Browse | r refresh | ? Help", "No installed packages"
+              Updates, "Tab/1-4 modes | / filters | r refresh | ? Help", "No updates found"
+              Consolidate,
+              "Tab/1-4 modes | / filters | r refresh | ? Help",
+              "No version differences found" ]
 
-        let empty = Presentation.project 126 browse
-        empty.ListIsInteractive |> should equal false
-        empty.ListNotice.Value.Contains("No packages found") |> should equal true
-        empty.ListNotice.Value.Contains("Press /") |> should equal true
-        empty.Context.Contains("Select a package") |> should equal false
+        [ 126; 90 ]
+        |> List.iter (fun columns ->
+            emptyModes
+            |> List.iter (fun (mode, expectedActions, expectedNotice) ->
+                let actual =
+                    { model () with
+                        Mode = mode
+                        Query.Text = "missing"
+                        Packages = []
+                        ActivePackage = None }
+                    |> Presentation.project columns
 
-        let pendingSearch =
-            { browse with
-                Packages = [ direct; central ]
-                ActivePackage = Some direct.Id
-                Pending.Search = Some(RequestToken 40L) }
-            |> Presentation.project 90
+                actual.ListIsInteractive |> should equal false
+                actual.ListNotice.Value.Contains(expectedNotice) |> should equal true
+                actual.Context.Contains("Select a package") |> should equal false
+                actual.Actions |> should equal expectedActions))
 
-        pendingSearch.ListIsInteractive |> should equal false
-        pendingSearch.ListNotice.Value.Contains("previous results") |> should equal true
-        pendingSearch.Rows |> List.forall (fun row -> row[1] = '~') |> should equal true
+    [<Fact>]
+    member _.``retained loading package modes expose cancellation without package actions``() =
+        let pending =
+            [ { model () with
+                  Mode = Browse
+                  Pending.Search = Some(RequestToken 40L) },
+              "Searching packages"
+              { model () with
+                  Pending.Preview = Some(RequestToken 41L) },
+              "Building preview"
+              { model () with
+                  Pending.Refresh = Some(RequestToken 42L) },
+              "Refreshing installed packages"
+              { model () with
+                  Mode = Updates
+                  Pending.Updates = Some(RequestToken 43L) },
+              "Finding package updates"
+              { model () with
+                  Mode = Consolidate
+                  Pending.Consolidation = Some(RequestToken 44L) },
+              "Finding version differences" ]
 
-        let pendingPreview =
-            { model () with
-                Pending.Preview = Some(RequestToken 41L) }
-            |> Presentation.project 126
+        [ 126; 90 ]
+        |> List.iter (fun columns ->
+            pending
+            |> List.iter (fun (initial, expectedNotice) ->
+                let actual = Presentation.project columns initial
 
-        pendingPreview.ListIsInteractive |> should equal false
+                actual.ListIsInteractive |> should equal false
+                actual.ListNotice.Value.Contains(expectedNotice) |> should equal true
 
-        pendingPreview.ListNotice.Value.Contains("Building preview")
-        |> should equal true
+                actual.ListNotice.Value.Contains("package actions are paused")
+                |> should equal true
 
-        pendingPreview.ListNotice.Value.Contains("package actions are paused")
-        |> should equal true
+                actual.Rows |> List.forall (fun row -> row[1] = '~') |> should equal true
+                actual.Actions |> should equal "Tab/1-4 modes | Esc cancel | ? Help"))
 
     [<Fact>]
     member _.``wide previews preserve the package list and expose every preview tab``() =

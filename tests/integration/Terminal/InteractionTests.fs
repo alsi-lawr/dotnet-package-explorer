@@ -194,26 +194,37 @@ type InteractionTests() =
         run pending [ Key.Esc ] |> should equal [ Cancel RefreshRequest ]
 
     [<Fact>]
-    member _.``retained package rows do not dispatch package actions while list data is pending``
+    member _.``retained loading lists gate package actions and dispatch their visible cancellation``
         ()
         =
-        let browse =
-            { model () with
-                Mode = Browse
-                Pending.Search = Some(RequestToken 40L) }
-
-        let preview =
-            { model () with
-                Pending.Preview = Some(RequestToken 41L) }
+        let pending =
+            [ { model () with
+                  Mode = Browse
+                  Pending.Search = Some(RequestToken 40L) },
+              SearchRequest
+              { model () with
+                  Pending.Preview = Some(RequestToken 41L) },
+              PreviewRequest
+              { model () with
+                  Pending.Refresh = Some(RequestToken 42L) },
+              RefreshRequest
+              { model () with
+                  Mode = Updates
+                  Pending.Updates = Some(RequestToken 43L) },
+              UpdatesRequest
+              { model () with
+                  Mode = Consolidate
+                  Pending.Consolidation = Some(RequestToken 44L) },
+              ConsolidationRequest ]
 
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
-            [ browse; preview ]
-            |> List.iter (fun pending ->
+            pending
+            |> List.iter (fun (initial, request) ->
                 runAt
                     width
                     height
-                    pending
+                    initial
                     [ Key.H.WithCtrl
                       Key.J
                       Key.Space
@@ -222,7 +233,9 @@ type InteractionTests() =
                       Key.S
                       Key.L
                       Key.Enter ]
-                |> should be Empty))
+                |> should be Empty
+
+                runAt width height initial [ Key.Esc ] |> should equal [ Cancel request ]))
 
     [<Fact>]
     member _.``operation routes block package commands and Help owns input until it closes``() =

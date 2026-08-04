@@ -161,6 +161,7 @@ type AnsiDriverTests() =
               "Enter"
               "p"
               "r"
+              "Esc              Back or cancel outside Help"
               "? / Esc"
               "q" ]
             |> List.iter (fun binding ->
@@ -224,32 +225,104 @@ type AnsiDriverTests() =
                 screen.Contains(longPackage.DisplayName) |> should equal true)
 
     [<Fact>]
-    member _.``empty and loading lists render local recovery and stale-result notices``() =
+    member _.``empty and loading lists keep footer and Help actions truthful and identical``() =
+        let gatedActions =
+            [ "j/k move"; "Space select"; "Enter details"; "p preview"; "s sort" ]
+
+        let actionLine (expected: string) (rows: string list) =
+            rows |> List.find (fun row -> row.Contains(expected, StringComparison.Ordinal))
+
+        let verify
+            width
+            height
+            (initial: Model)
+            (expectedActions: string)
+            (expectedNotice: string)
+            =
+            let projection = Presentation.project width initial
+            projection.Actions |> should equal expectedActions
+
+            let footerRows = renderWithKeys width height initial []
+            let footerActions = actionLine expectedActions footerRows
+
+            gatedActions
+            |> List.iter (fun action ->
+                footerActions.Contains(action, StringComparison.Ordinal) |> should equal false)
+
+            let footer = String.concat Environment.NewLine footerRows
+            footer.Contains(expectedNotice, StringComparison.Ordinal) |> should equal true
+
+            let helpRows = renderWithKeys width height initial [ Key '?' ]
+            let helpActions = actionLine expectedActions helpRows
+
+            gatedActions
+            |> List.iter (fun action ->
+                helpActions.Contains(action, StringComparison.Ordinal) |> should equal false)
+
+            let help = String.concat Environment.NewLine helpRows
+            help.Contains("Current actions", StringComparison.Ordinal) |> should equal true
+
+            help.Contains("Esc              Back or cancel outside Help")
+            |> should equal true
+
+            help.Contains("? / Esc          Close help") |> should equal true
+
+        let empty =
+            [ { model () with
+                  Mode = Browse
+                  Query.Text = "missing"
+                  Packages = []
+                  ActivePackage = None },
+              "Tab/1-4 modes | / search | ? Help",
+              "No packages found."
+              { model () with
+                  Mode = Installed
+                  Packages = []
+                  ActivePackage = None },
+              "1 Browse | r refresh | ? Help",
+              "No installed packages."
+              { model () with
+                  Mode = Updates
+                  Packages = []
+                  ActivePackage = None },
+              "Tab/1-4 modes | / filters | r refresh | ? Help",
+              "No updates found."
+              { model () with
+                  Mode = Consolidate
+                  Packages = []
+                  ActivePackage = None },
+              "Tab/1-4 modes | / filters | r refresh | ? Help",
+              "No version differences found." ]
+
+        let loading =
+            [ { model () with
+                  Mode = Browse
+                  Pending.Search = Some(RequestToken 40L) },
+              "Searching packages..."
+              { model () with
+                  Pending.Preview = Some(RequestToken 41L) },
+              "Building preview..."
+              { model () with
+                  Pending.Refresh = Some(RequestToken 42L) },
+              "Refreshing installed packages..."
+              { model () with
+                  Mode = Updates
+                  Pending.Updates = Some(RequestToken 43L) },
+              "Finding package updates..."
+              { model () with
+                  Mode = Consolidate
+                  Pending.Consolidation = Some(RequestToken 44L) },
+              "Finding version differences..." ]
+
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
-            let empty =
-                { model () with
-                    Mode = Browse
-                    Query.Text = "missing"
-                    Packages = []
-                    ActivePackage = None }
-                |> renderTextWithKeys width height
-                <| []
+            empty
+            |> List.iter (fun (initial, actions, notice) ->
+                verify width height initial actions notice)
 
-            empty.Contains("No packages found.") |> should equal true
-            empty.Contains("Press / to change") |> should equal true
-            empty.Contains("Select a package") |> should equal false
-
-            let loading =
-                { model () with
-                    Mode = Browse
-                    Pending.Search = Some(RequestToken 40L) }
-                |> renderTextWithKeys width height
-                <| []
-
-            loading.Contains("Searching packages...") |> should equal true
-            loading.Contains("previous results") |> should equal true
-            loading.Contains(">~") |> should equal true)
+            loading
+            |> List.iter (fun (initial, notice) ->
+                verify width height initial "Tab/1-4 modes | Esc cancel | ? Help" notice))
 
     [<Fact>]
     member _.``wide and compact operation states keep lifecycle actions and failures visible``() =

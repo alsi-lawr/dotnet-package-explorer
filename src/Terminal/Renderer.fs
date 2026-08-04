@@ -304,7 +304,7 @@ type ExplorerWindow
             X = Pos.Center(),
             Y = Pos.Center(),
             Width = Dim.Absolute 76,
-            Height = Dim.Absolute 22,
+            Height = Dim.Absolute 23,
             Title = "Help",
             BorderStyle = LineStyle.Rounded,
             Visible = false
@@ -430,6 +430,7 @@ type ExplorerWindow
             + "Enter            Open or confirm\n"
             + "p                Preview\n"
             + "r                Refresh\n\n"
+            + "Esc              Back or cancel outside Help\n"
             + "? / Esc          Close help\n"
             + "q                Quit"
 

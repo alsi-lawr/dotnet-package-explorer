@@ -284,6 +284,17 @@ module internal Presentation =
         | OperationConfirmation _
         | OperationProgress _ -> "? Help"
 
+    let private packageListActions (model: Model) =
+        match listPending model with
+        | Some _ -> "Tab/1-4 modes | Esc cancel | ? Help"
+        | None when List.isEmpty model.Packages ->
+            match model.Mode with
+            | Browse -> "Tab/1-4 modes | / search | ? Help"
+            | Installed -> "1 Browse | r refresh | ? Help"
+            | Updates
+            | Consolidate -> "Tab/1-4 modes | / filters | r refresh | ? Help"
+        | None -> routeActions PackageList
+
     let private ownsFailureInput =
         function
         | BackendSessionFailure
@@ -537,6 +548,12 @@ j/k move | Space select project and all frameworks | p preview
         let layout = rowLayout contentWidth model
         let isPending = listPending model |> Option.isSome
         let notice = listNotice model
+
+        let actions =
+            match model.Route with
+            | Content PackageList -> packageListActions model
+            | Content _
+            | Failure _ -> actions
 
         let modes =
             [ Browse; Installed; Updates; Consolidate ]
