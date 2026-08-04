@@ -339,6 +339,20 @@ type AsynchronousUpdateTests() =
         let refreshResponse =
             RefreshCompleted(refreshToken, Ok(snapshot [ centralPackage ]))
 
+        let updatesLoading, updatesEffects = update (ChangeMode Updates) initial
+        let updatesToken = requestToken updatesEffects
+
+        let updatesResponse =
+            UpdatesCompleted(updatesToken, Ok { Updates = []; Continuation = None })
+
+        let consolidationLoading, consolidationEffects =
+            update (ChangeMode Consolidate) initial
+
+        let consolidationToken = requestToken consolidationEffects
+
+        let consolidationResponse =
+            ConsolidationCompleted(consolidationToken, Ok { Packages = []; Continuation = None })
+
         let detailsLoading, detailsEffects = update (ShowDetails directPackage.Id) initial
         let detailsToken = requestToken detailsEffects
 
@@ -383,6 +397,8 @@ type AsynchronousUpdateTests() =
 
         [ searching, searchResponse
           refreshing, refreshResponse
+          updatesLoading, updatesResponse
+          consolidationLoading, consolidationResponse
           detailsLoading, detailsResponse
           readmeLoading, readmeResponse
           previewLoading, previewResponse

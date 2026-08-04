@@ -335,6 +335,8 @@ type PackageExplorerEvent =
 type RequestKind =
     | SearchRequest
     | RefreshRequest
+    | UpdatesRequest
+    | ConsolidationRequest
     | DetailsRequest
     | ReadmeRequest
     | PreviewRequest

@@ -54,6 +54,8 @@ module TestData =
         match effects with
         | [ SearchPackages request ] -> request.Token
         | [ RefreshInstalled request ] -> request.Token
+        | [ FindPackageUpdates request ] -> request.Token
+        | [ FindPackageConsolidation request ] -> request.Token
         | [ GetPackageDetails request ] -> request.Token
         | [ GetPackageReadme request ] -> request.Token
         | [ PreviewOperation request ] -> request.Token

@@ -30,6 +30,8 @@ type ScrollIdentity =
 type PendingRequests =
     { Search: RequestToken option
       Refresh: RequestToken option
+      Updates: RequestToken option
+      Consolidation: RequestToken option
       Details: RequestToken option
       Readme: RequestToken option
       Preview: RequestToken option
@@ -39,6 +41,8 @@ module PendingRequests =
     let empty =
         { Search = None
           Refresh = None
+          Updates = None
+          Consolidation = None
           Details = None
           Readme = None
           Preview = None
@@ -52,6 +56,8 @@ type Model =
       HasNextPage: bool
       Packages: PackageSummary list
       Installed: InstalledSnapshot option
+      AvailableUpdates: PackageUpdatesPage option
+      AvailableConsolidation: PackageConsolidationPage option
       Sort: PackageSort
       SelectedSource: PackageSource option
       SelectedVersions: Map<PackageId, PackageVersion>
@@ -70,6 +76,8 @@ type Model =
 type Effect =
     | SearchPackages of SearchPackagesRequest
     | RefreshInstalled of InstalledRefreshRequest
+    | FindPackageUpdates of PackageUpdatesRequest
+    | FindPackageConsolidation of PackageConsolidationRequest
     | GetPackageDetails of PackageDetailsRequest
     | GetPackageReadme of PackageReadmeRequest
     | PreviewOperation of PreviewOperationRequest
@@ -88,6 +96,8 @@ type Message =
     | SearchCompleted of RequestToken * Result<SearchPage, ApplicationFailure>
     | Refresh
     | RefreshCompleted of RequestToken * Result<InstalledSnapshot, ApplicationFailure>
+    | UpdatesCompleted of RequestToken * Result<PackageUpdatesPage, ApplicationFailure>
+    | ConsolidationCompleted of RequestToken * Result<PackageConsolidationPage, ApplicationFailure>
     | SelectPackage of PackageId
     | SetPackageSelection of PackageId * selected: bool
     | ShowDetails of PackageId
@@ -149,6 +159,8 @@ module Model =
               HasNextPage = false
               Packages = PackageSort.apply mode (PackageSort.defaultForMode mode) packages
               Installed = installed
+              AvailableUpdates = None
+              AvailableConsolidation = None
               Sort = PackageSort.defaultForMode mode
               SelectedSource = None
               SelectedVersions = Map.empty

@@ -55,6 +55,8 @@ module Update =
         match requestKind with
         | SearchRequest -> BackendSessionFailure
         | RefreshRequest -> BackendSessionFailure
+        | UpdatesRequest -> BackendSessionFailure
+        | ConsolidationRequest -> BackendSessionFailure
         | DetailsRequest
         | ReadmeRequest ->
             match contentRoute model.Route with
@@ -69,6 +71,8 @@ module Update =
         match requestKind with
         | SearchRequest -> pending.Search
         | RefreshRequest -> pending.Refresh
+        | UpdatesRequest -> pending.Updates
+        | ConsolidationRequest -> pending.Consolidation
         | DetailsRequest -> pending.Details
         | ReadmeRequest -> pending.Readme
         | PreviewRequest -> pending.Preview
@@ -78,6 +82,8 @@ module Update =
         match requestKind with
         | SearchRequest -> { pending with Search = None }
         | RefreshRequest -> { pending with Refresh = None }
+        | UpdatesRequest -> { pending with Updates = None }
+        | ConsolidationRequest -> { pending with Consolidation = None }
         | DetailsRequest -> { pending with Details = None }
         | ReadmeRequest -> { pending with Readme = None }
         | PreviewRequest -> { pending with Preview = None }
@@ -98,15 +104,140 @@ module Update =
         else
             frameworks.Add(project, updated)
 
-    let private modePackages model mode =
+    let private packageName (PackageId package) = package
+
+    let private commonVersion fallback versions =
+        match versions |> List.distinct with
+        | [] -> fallback
+        | [ version ] -> Some version
+        | _ -> None
+
+    let private installedSummary (model: Model) package =
+        model.Installed
+        |> Option.map InstalledSnapshot.packages
+        |> Option.bind (List.tryFind (fun summary -> summary.Id = package))
+        |> Option.defaultWith (fun () ->
+            { Id = package
+              DisplayName = packageName package
+              InstalledVersion = None
+              LatestVersion = None
+              Kind = None
+              Source = None
+              Relevance = None
+              Description = None })
+
+    let private updatePackages (model: Model) (page: PackageUpdatesPage) =
+        page.Updates
+        |> List.groupBy _.Package
+        |> List.map (fun (package, updates: PackageUpdate list) ->
+            let summary = installedSummary model package
+
+            { summary with
+                InstalledVersion =
+                    updates
+                    |> List.choose _.InstalledVersion
+                    |> commonVersion summary.InstalledVersion
+                LatestVersion =
+                    updates
+                    |> List.collect _.AvailableVersions
+                    |> List.distinct
+                    |> List.tryHead
+                    |> Option.orElse summary.LatestVersion })
+
+    let private consolidationPackages (model: Model) (page: PackageConsolidationPage) =
+        page.Packages
+        |> List.map (fun (package: PackageConsolidation) ->
+            let summary = installedSummary model package.Package
+
+            { summary with
+                InstalledVersion =
+                    package.CurrentVersions
+                    |> List.map fst
+                    |> commonVersion summary.InstalledVersion
+                LatestVersion =
+                    package.CandidateVersions
+                    |> List.tryHead
+                    |> Option.orElse summary.LatestVersion })
+
+    let private modePackages (model: Model) mode =
         match mode with
         | Browse -> []
-        | Installed
-        | Updates
-        | Consolidate ->
+        | Installed ->
             model.Installed
             |> Option.map InstalledSnapshot.packages
             |> Option.defaultValue []
+        | Updates ->
+            model.AvailableUpdates
+            |> Option.map (updatePackages model)
+            |> Option.defaultValue []
+        | Consolidate ->
+            model.AvailableConsolidation
+            |> Option.map (consolidationPackages model)
+            |> Option.defaultValue []
+
+    let private modeHasNextPage (model: Model) mode =
+        match mode with
+        | Updates -> model.AvailableUpdates |> Option.bind _.Continuation |> Option.isSome
+        | Consolidate -> model.AvailableConsolidation |> Option.bind _.Continuation |> Option.isSome
+        | Browse
+        | Installed -> false
+
+    let private requestModeData (model: Model) =
+        match model.Mode with
+        | Browse when model.Capabilities.Contains BrowsePackages ->
+            let token, next = allocateToken model
+
+            { next with
+                Pending.Search = Some token },
+            [ SearchPackages
+                  { Token = token
+                    Target = model.Target
+                    Source = model.SelectedSource
+                    Query = model.Query } ]
+        | Installed when model.Capabilities.Contains ReadInstalledPackages ->
+            let token, next = allocateToken model
+
+            { next with
+                Pending.Refresh = Some token },
+            [ RefreshInstalled { Token = token; Target = model.Target } ]
+        | Updates when model.Capabilities.Contains UpdatePackages ->
+            let token, next = allocateToken model
+
+            { next with
+                Pending =
+                    { next.Pending with
+                        Updates = Some token
+                        Consolidation = None } },
+            [ FindPackageUpdates
+                  { Token = token
+                    Target = model.Target
+                    IncludePrerelease = model.Query.IncludePrerelease
+                    PageSize = model.Query.PageSize
+                    Continuation = None } ]
+        | Consolidate when model.Capabilities.Contains ConsolidatePackages ->
+            let token, next = allocateToken model
+
+            { next with
+                Pending =
+                    { next.Pending with
+                        Updates = None
+                        Consolidation = Some token } },
+            [ FindPackageConsolidation
+                  { Token = token
+                    Target = model.Target
+                    PageSize = model.Query.PageSize
+                    Continuation = None } ]
+        | Browse
+        | Installed
+        | Updates
+        | Consolidate -> model, []
+
+    let private requestInstalledDependentModeData (model: Model) =
+        match model.Mode with
+        | Updates
+        | Consolidate -> requestModeData model
+        | Browse
+        | Installed -> model, []
 
     let private projectSelectedVersion selectedVersions operation =
         let selected package current =
@@ -131,22 +262,26 @@ module Update =
             if model.Capabilities.Contains required then
                 let sort = PackageSort.defaultForMode mode
 
-                { model with
-                    Mode = mode
-                    Sort = sort
-                    HasNextPage = false
-                    Packages = modePackages model mode |> PackageSort.apply mode sort
-                    ActivePackage = None
-                    SelectedPackages = Set.empty
-                    Route = Content PackageList
-                    Pending =
-                        { model.Pending with
-                            Search = None
-                            Details = None
-                            Readme = None
-                            Preview = None
-                            Apply = None } },
-                []
+                let next =
+                    { model with
+                        Mode = mode
+                        Sort = sort
+                        HasNextPage = modeHasNextPage model mode
+                        Packages = modePackages model mode |> PackageSort.apply mode sort
+                        ActivePackage = None
+                        SelectedPackages = Set.empty
+                        Route = Content PackageList
+                        Pending =
+                            { model.Pending with
+                                Search = None
+                                Updates = None
+                                Consolidation = None
+                                Details = None
+                                Readme = None
+                                Preview = None
+                                Apply = None } }
+
+                requestModeData next
             else
                 showFailure
                     BackendSessionFailure
@@ -158,15 +293,17 @@ module Update =
             let packages =
                 match model.Mode with
                 | Browse -> []
-                | Installed
-                | Updates
-                | Consolidate ->
+                | Installed ->
                     installed |> Option.map InstalledSnapshot.packages |> Option.defaultValue []
+                | Updates
+                | Consolidate -> []
 
             let next =
                 { model with
                     Target = target
                     Installed = installed
+                    AvailableUpdates = None
+                    AvailableConsolidation = None
                     HasNextPage = false
                     Packages = PackageSort.apply model.Mode model.Sort packages
                     TargetSelection = TargetSelection.forTarget target
@@ -229,6 +366,9 @@ module Update =
                 Pending.Search = None },
             []
 
+        | SubmitSearch when model.Mode = Updates -> requestModeData model
+        | SubmitSearch when model.Mode = Consolidate -> requestModeData model
+        | SubmitSearch when model.Mode = Installed -> model, []
         | SubmitSearch when not (model.Capabilities.Contains BrowsePackages) ->
             showFailure
                 BackendSessionFailure
@@ -285,21 +425,52 @@ module Update =
             let packages =
                 match model.Mode with
                 | Browse -> model.Packages
-                | Installed
-                | Updates
-                | Consolidate ->
+                | Installed ->
                     snapshot
                     |> InstalledSnapshot.packages
                     |> PackageSort.apply model.Mode model.Sort
+                | Updates
+                | Consolidate -> model.Packages
 
-            { model with
-                Installed = Some snapshot
-                Packages = packages
-                Pending.Refresh = None }
-            |> clearFailure BackendSessionFailure,
-            []
+            let next =
+                { model with
+                    Installed = Some snapshot
+                    Packages = packages
+                    Pending.Refresh = None }
+                |> clearFailure BackendSessionFailure
+
+            requestInstalledDependentModeData next
         | RefreshCompleted(_, Error failure) ->
             { model with Pending.Refresh = None } |> showFailure failure.Scope failure, []
+
+        | UpdatesCompleted(token, _) when model.Pending.Updates <> Some token -> model, []
+        | UpdatesCompleted(_, Ok page) ->
+            { model with
+                AvailableUpdates = Some page
+                HasNextPage = page.Continuation.IsSome
+                Packages = page |> updatePackages model |> PackageSort.apply Updates model.Sort
+                Pending.Updates = None }
+            |> clearFailure BackendSessionFailure,
+            []
+        | UpdatesCompleted(_, Error failure) ->
+            { model with Pending.Updates = None } |> showFailure failure.Scope failure, []
+
+        | ConsolidationCompleted(token, _) when model.Pending.Consolidation <> Some token ->
+            model, []
+        | ConsolidationCompleted(_, Ok page) ->
+            { model with
+                AvailableConsolidation = Some page
+                HasNextPage = page.Continuation.IsSome
+                Packages =
+                    page |> consolidationPackages model |> PackageSort.apply Consolidate model.Sort
+                Pending.Consolidation = None }
+            |> clearFailure BackendSessionFailure,
+            []
+        | ConsolidationCompleted(_, Error failure) ->
+            { model with
+                Pending.Consolidation = None }
+            |> showFailure failure.Scope failure,
+            []
 
         | SelectPackage package ->
             { model with
@@ -499,20 +670,22 @@ module Update =
             let packages =
                 match model.Mode with
                 | Browse -> model.Packages
-                | Installed
-                | Updates
-                | Consolidate ->
+                | Installed ->
                     result.Installed
                     |> InstalledSnapshot.packages
                     |> PackageSort.apply model.Mode model.Sort
+                | Updates
+                | Consolidate -> model.Packages
 
-            { model with
-                Installed = Some result.Installed
-                Packages = packages
-                Route = Content PackageList
-                Pending.Apply = None }
-            |> clearFailure (OperationFailure(Some result.Preview)),
-            []
+            let next =
+                { model with
+                    Installed = Some result.Installed
+                    Packages = packages
+                    Route = Content PackageList
+                    Pending.Apply = None }
+                |> clearFailure (OperationFailure(Some result.Preview))
+
+            requestInstalledDependentModeData next
         | ApplyCompleted(_, Error failure) ->
             { model with Pending.Apply = None } |> showFailure failure.Scope failure, []
 

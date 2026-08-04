@@ -12,6 +12,8 @@
         <Compile Include="TestData.fs" />
         <Compile Include="NavigationAndSortingTests.fs" />
         <Compile Include="AsynchronousUpdateTests.fs" />
+        <Compile Include="ModeEntryTests.fs" />
+        <Compile Include="ModeDiscoveryTests.fs" />
         <Compile Include="OperationsAndFailuresTests.fs" />
         <Compile Include="ClientPortTests.fs" />
     </ItemGroup>
