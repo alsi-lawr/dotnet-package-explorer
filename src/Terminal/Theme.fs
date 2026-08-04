@@ -11,6 +11,7 @@ type ColorProfile =
 type TerminalSchemes =
     { Canvas: Scheme
       Section: Scheme
+      Muted: Scheme
       Information: Scheme
       Success: Scheme
       Warning: Scheme
@@ -59,6 +60,7 @@ module internal Theme =
 
         { Canvas = scheme (attribute white black) (attribute white selection)
           Section = scheme (attribute purple black) (attribute white selection)
+          Muted = scheme (attribute muted black) (attribute white selection)
           Information = scheme (attribute blue black) (attribute white selection)
           Success = scheme (attribute success black) (attribute white selection)
           Warning = scheme (attribute warning black) (attribute white selection)

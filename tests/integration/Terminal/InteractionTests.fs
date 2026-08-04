@@ -115,6 +115,39 @@ type InteractionTests() =
                 |> should contain (ChangeSort { Field = field; Direction = direction })))
 
     [<Fact>]
+    member _.``sort and its Help keep ownership until their local action closes``() =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let initial = model ()
+
+            runAt
+                width
+                height
+                initial
+                [ Key.S
+                  Key '?'
+                  Key.D1
+                  Key.J
+                  Key.L
+                  Key.Enter
+                  Key.R
+                  Key '?'
+                  Key.Enter
+                  Key.R ]
+            |> should equal [ ChangeSort initial.Sort; Refresh ])
+
+    [<Fact>]
+    member _.``Help takes input ownership from an active search field``() =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt
+                width
+                height
+                (model ())
+                [ Key '/'; Key '?'; Key.D1; Key.Enter; Key.R; Key '?'; Key.Esc; Key.R ]
+            |> should equal [ Refresh ])
+
+    [<Fact>]
     member _.``preview confirmation applies only after two public activations``() =
         let initial =
             { model () with

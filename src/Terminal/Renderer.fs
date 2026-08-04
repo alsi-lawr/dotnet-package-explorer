@@ -9,6 +9,10 @@ open Terminal.Gui.Drawing
 open Terminal.Gui.ViewBase
 open Terminal.Gui.Views
 
+type private SortFocus =
+    | SortField
+    | SortDirection
+
 type ExplorerWindow
     (initial: Model, dispatch: Message -> unit, stop: unit -> unit, profile: ColorProfile) as this =
     inherit Window()
@@ -21,8 +25,11 @@ type ExplorerWindow
     let mutable rendering = false
     let mutable sortOpen = false
     let mutable pendingSort = initial.Sort
+    let mutable sortFocus = SortField
+    let mutable sortReturnFocus: View option = None
     let mutable confirmationOpen = false
     let mutable helpOpen = false
+    let mutable helpReturnFocus: View option = None
     let mutable narrowContext = false
     let mutable targetIndex = 0
 
@@ -140,7 +147,7 @@ type ExplorerWindow
             X = Pos.Absolute 0,
             Y = Pos.Bottom searchFrame,
             Width = Dim.Percent 45,
-            Height = Dim.Fill 3,
+            Height = Dim.Fill 2,
             BorderStyle = LineStyle.Rounded
         )
 
@@ -183,16 +190,16 @@ type ExplorerWindow
             X = Pos.Right listFrame,
             Y = Pos.Bottom searchFrame,
             Width = Dim.Fill(),
-            Height = Dim.Fill 3,
+            Height = Dim.Fill 2,
             BorderStyle = LineStyle.Rounded
         )
 
     let guidance =
         new Label(
             X = Pos.Absolute 0,
-            Y = Pos.AnchorEnd 3,
+            Y = Pos.AnchorEnd 2,
             Width = Dim.Fill(),
-            Height = Dim.Absolute 2,
+            Height = Dim.Absolute 1,
             Text = ""
         )
 
@@ -213,23 +220,32 @@ type ExplorerWindow
             Height = Dim.Absolute 1
         )
 
-    let sortContents =
-        new Markdown(
+    let sortBackdrop =
+        new View(
             X = Pos.Absolute 0,
             Y = Pos.Absolute 0,
             Width = Dim.Fill(),
             Height = Dim.Fill(),
             CanFocus = false,
-            ShowHeadingPrefix = false
+            Visible = false
+        )
+
+    let sortContents =
+        new Label(
+            X = Pos.Absolute 2,
+            Y = Pos.Absolute 1,
+            Width = Dim.Fill 2,
+            Height = Dim.Fill 1,
+            CanFocus = false
         )
 
     let sortFrame =
         new FrameView(
-            X = Pos.AnchorEnd 36,
-            Y = Pos.Absolute 6,
-            Width = Dim.Absolute 34,
+            X = Pos.Center(),
+            Y = Pos.Center(),
+            Width = Dim.Absolute 48,
             Height = Dim.Absolute 9,
-            Title = "Sort packages",
+            Title = "[s] Sort packages",
             BorderStyle = LineStyle.Rounded,
             Visible = false
         )
@@ -273,6 +289,16 @@ type ExplorerWindow
             CanFocus = false
         )
 
+    let helpBackdrop =
+        new View(
+            X = Pos.Absolute 0,
+            Y = Pos.Absolute 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+            CanFocus = false,
+            Visible = false
+        )
+
     let helpFrame =
         new FrameView(
             X = Pos.Center(),
@@ -294,6 +320,9 @@ type ExplorerWindow
 
     let operationOwnsInput () =
         confirmationOpen || Presentation.ownsInput model
+
+    let backgroundInputBlocked () =
+        helpOpen || sortOpen || operationOwnsInput ()
 
     let readmeCodeWidth columns =
         match Presentation.width columns with
@@ -377,7 +406,9 @@ type ExplorerWindow
                 context.Viewport <- oldViewport
 
     let currentActions () =
-        if confirmationOpen then
+        if sortOpen then
+            "h/l field | j/k direction | Enter apply | Esc close | ? Help"
+        elif confirmationOpen then
             "Enter apply | Esc cancel | ? Help"
         else
             projection.Actions
@@ -434,9 +465,14 @@ type ExplorerWindow
             | Ascending -> "Ascending"
             | Descending -> "Descending"
 
+        let marker control =
+            if sortFocus = control then ">" else " "
+
         sortContents.Text <-
-            $"**Field:** {field}\n\n**Direction:** {direction}\n\n"
-            + "h/l field | j/k direction | Enter apply | Esc close"
+            $"{marker SortField} Field       {field}\n"
+            + $"{marker SortDirection} Direction   {direction}\n\n"
+            + "h/l Change field    j/k Change direction\n"
+            + "Enter Apply    Esc Close    ? Help"
 
     let updateRows next =
         let expected = next.Rows |> List.toArray
@@ -498,7 +534,7 @@ type ExplorerWindow
             contextFrame.X <- Pos.Absolute 0
             contextFrame.Y <- Pos.Absolute 0
             contextFrame.Width <- Dim.Fill()
-            contextFrame.Height <- Dim.Fill 3
+            contextFrame.Height <- Dim.Fill 2
         elif narrow then
             searchLabel.X <- Pos.Absolute 1
             searchLabel.Y <- Pos.Absolute 0
@@ -518,7 +554,7 @@ type ExplorerWindow
             contextFrame.X <- Pos.Absolute 0
             contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()
-            contextFrame.Height <- Dim.Fill 3
+            contextFrame.Height <- Dim.Fill 2
             listFrame.Visible <- not showContext
             contextFrame.Visible <- showContext
         else
@@ -544,7 +580,7 @@ type ExplorerWindow
             contextFrame.X <- Pos.Right listFrame
             contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()
-            contextFrame.Height <- Dim.Fill 3
+            contextFrame.Height <- Dim.Fill 2
             listFrame.Visible <- true
             contextFrame.Visible <- true
 
@@ -566,8 +602,16 @@ type ExplorerWindow
                 confirmationOpen <- false
                 confirmationFrame.Visible <- false
 
+            if sortOpen then
+                sortOpen <- false
+                sortBackdrop.Visible <- false
+                sortFrame.Visible <- false
+                sortReturnFocus <- None
+
             helpOpen <- false
+            helpBackdrop.Visible <- false
             helpFrame.Visible <- false
+            helpReturnFocus <- None
 
         projection <- Presentation.project this.Viewport.Width model
 
@@ -803,7 +847,10 @@ type ExplorerWindow
     let dismissOrCancel () =
         if sortOpen then
             sortOpen <- false
+            sortBackdrop.Visible <- false
             sortFrame.Visible <- false
+            sortReturnFocus |> Option.iter (fun view -> view.SetFocus() |> ignore)
+            sortReturnFocus <- None
         elif confirmationOpen then
             confirmationOpen <- false
             confirmationFrame.Visible <- false
@@ -824,19 +871,25 @@ type ExplorerWindow
                 setLayout this.Viewport.Width
 
     let openHelp () =
+        helpReturnFocus <- this.MostFocused |> Option.ofObj
         helpOpen <- true
         renderHelp ()
+        helpBackdrop.Visible <- true
         helpFrame.Visible <- true
         helpFrame.SetFocus() |> ignore
 
     let closeHelp () =
         helpOpen <- false
+        helpBackdrop.Visible <- false
         helpFrame.Visible <- false
 
-        if confirmationOpen then
-            confirmationFrame.SetFocus() |> ignore
-        elif Presentation.ownsInput model then
-            context.SetFocus() |> ignore
+        match helpReturnFocus with
+        | Some view -> view.SetFocus() |> ignore
+        | None when confirmationOpen -> confirmationFrame.SetFocus() |> ignore
+        | None when Presentation.ownsInput model -> context.SetFocus() |> ignore
+        | None -> ()
+
+        helpReturnFocus <- None
 
     let restoreProjectionChrome () =
         guidance.Text <- projection.Actions
@@ -875,6 +928,43 @@ type ExplorerWindow
                 restoreProjectionChrome ()
             | ShowHelp -> openHelp ()
             | _ -> ()
+        elif sortOpen then
+            match action with
+            | MoveRow _ ->
+                sortFocus <- SortDirection
+
+                pendingSort <-
+                    { pendingSort with
+                        Direction =
+                            match pendingSort.Direction with
+                            | Ascending -> Descending
+                            | Descending -> Ascending }
+
+                renderSort ()
+            | MoveHorizontal direction ->
+                sortFocus <- SortField
+                let fields = [ Relevance; Name; Version; Type ]
+
+                pendingSort <-
+                    { pendingSort with
+                        Field = cycle fields pendingSort.Field direction }
+
+                renderSort ()
+            | Activate ->
+                sortOpen <- false
+                sortBackdrop.Visible <- false
+                sortFrame.Visible <- false
+                dispatch (ChangeSort pendingSort)
+                sortReturnFocus |> Option.iter (fun view -> view.SetFocus() |> ignore)
+                sortReturnFocus <- None
+            | Back ->
+                sortOpen <- false
+                sortBackdrop.Visible <- false
+                sortFrame.Visible <- false
+                sortReturnFocus |> Option.iter (fun view -> view.SetFocus() |> ignore)
+                sortReturnFocus <- None
+            | ShowHelp -> openHelp ()
+            | _ -> ()
         else
             match model.Route, action with
             | Failure(_, scope), Back -> dispatch (DismissFailure scope)
@@ -886,15 +976,6 @@ type ExplorerWindow
         | NextMode -> dispatch (ChangeMode(cycle modeOrder model.Mode 1))
         | PreviousMode -> dispatch (ChangeMode(cycle modeOrder model.Mode -1))
         | SelectMode mode -> dispatch (ChangeMode mode)
-        | MoveRow _ when sortOpen ->
-            pendingSort <-
-                { pendingSort with
-                    Direction =
-                        match pendingSort.Direction with
-                        | Ascending -> Descending
-                        | Descending -> Ascending }
-
-            renderSort ()
         | MoveRow direction -> messageForMove direction
         | MoveHorizontal direction -> moveHorizontal direction
         | MovePane direction ->
@@ -913,8 +994,11 @@ type ExplorerWindow
         | OpenSort when not projection.ListIsInteractive -> ()
         | OpenSort ->
             pendingSort <- model.Sort
+            sortFocus <- SortField
+            sortReturnFocus <- this.MostFocused |> Option.ofObj
             sortOpen <- true
             renderSort ()
+            sortBackdrop.Visible <- true
             sortFrame.Visible <- true
             sortFrame.SetFocus() |> ignore
         | FocusSearch -> search.SetFocus() |> ignore
@@ -931,11 +1015,6 @@ type ExplorerWindow
                 |> Option.iter (fun package ->
                     let selected = not (model.SelectedPackages.Contains package.Id)
                     dispatch (SetPackageSelection(package.Id, selected)))
-        | Activate when sortOpen ->
-            sortOpen <- false
-            sortFrame.Visible <- false
-            dispatch (ChangeSort pendingSort)
-            packageList.SetFocus() |> ignore
         | Activate when search.HasFocus ->
             dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
             dispatch SubmitSearch
@@ -977,7 +1056,7 @@ type ExplorerWindow
 
 
     let handle action =
-        if operationOwnsInput () || helpOpen then
+        if backgroundInputBlocked () then
             handleOwnedAction action
         else
             handleUnowned action
@@ -995,6 +1074,7 @@ type ExplorerWindow
             | NextMode
             | PreviousMode
             | MovePane _
+            | ShowHelp
             | Back -> true
             | _ -> false
 
@@ -1009,10 +1089,7 @@ type ExplorerWindow
         match Keyboard.action key with
         | Some action when usesNativeActivation action -> ()
         | Some action when
-            operationOwnsInput ()
-            || helpOpen
-            || not isTextInput
-            || allowedWhileEditing action
+            backgroundInputBlocked () || not isTextInput || allowedWhileEditing action
             ->
             handle action
             key.Handled <- true
@@ -1059,14 +1136,16 @@ type ExplorerWindow
         this.Add guidance |> ignore
         this.Add status |> ignore
         this.Add route |> ignore
+        this.Add sortBackdrop |> ignore
         this.Add sortFrame |> ignore
         this.Add confirmationFrame |> ignore
+        this.Add helpBackdrop |> ignore
         helpFrame.Add helpContents |> ignore
         this.Add helpFrame |> ignore
 
-        Theme.apply schemes.Canvas this
-        Theme.apply schemes.Section modeFrame
-        Theme.apply schemes.Section searchFrame
+        Theme.apply schemes.Section this
+        Theme.apply schemes.Muted modeFrame
+        Theme.apply schemes.Muted searchFrame
         Theme.apply schemes.Section listFrame
         Theme.apply schemes.Section contextFrame
         Theme.apply schemes.Canvas packageList
@@ -1078,11 +1157,15 @@ type ExplorerWindow
         Theme.apply schemes.Section search
         Theme.apply schemes.Section source
         Theme.apply schemes.Section prerelease
+        Theme.apply schemes.Muted guidance
         Theme.apply schemes.Information route
         Theme.apply schemes.Success status
-        Theme.apply schemes.Section sortFrame
-        Theme.apply schemes.Section confirmationFrame
-        Theme.apply schemes.Section helpFrame
+        Theme.apply schemes.Canvas sortBackdrop
+        Theme.apply schemes.Information sortFrame
+        Theme.apply schemes.Canvas sortContents
+        Theme.apply schemes.Information confirmationFrame
+        Theme.apply schemes.Canvas helpBackdrop
+        Theme.apply schemes.Information helpFrame
         Theme.apply schemes.Canvas helpContents
 
         packageList.SetSource rows
@@ -1092,6 +1175,9 @@ type ExplorerWindow
 
         context.ViewportSettings <-
             context.ViewportSettings ||| ViewportSettingsFlags.HasVerticalScrollBar
+
+        Theme.apply schemes.Muted packageList.VerticalScrollBar
+        Theme.apply schemes.Muted context.VerticalScrollBar
 
         packageList.RowRender.Add(fun args ->
             model.Packages
@@ -1106,10 +1192,7 @@ type ExplorerWindow
 
         packageList.ValueChanged.Add(fun args ->
             if
-                not rendering
-                && projection.ListIsInteractive
-                && not (operationOwnsInput ())
-                && not helpOpen
+                not rendering && projection.ListIsInteractive && not (backgroundInputBlocked ())
             then
                 args.NewValue
                 |> Option.ofNullable
@@ -1119,17 +1202,17 @@ type ExplorerWindow
         modeButtons
         |> List.iter (fun (mode, button) ->
             button.Accepting.Add(fun _ ->
-                if not (operationOwnsInput ()) && not helpOpen then
+                if not (backgroundInputBlocked ()) then
                     dispatch (ChangeMode mode)))
 
         detailsButton.Accepting.Add(fun _ ->
-            if not (operationOwnsInput ()) && not helpOpen then
+            if not (backgroundInputBlocked ()) then
                 selectedPackage ()
                 |> Option.filter (fun _ -> projection.ListIsInteractive)
                 |> Option.iter (fun package -> dispatch (ShowDetails package.Id)))
 
         readmeButton.Accepting.Add(fun _ ->
-            if not (operationOwnsInput ()) && not helpOpen then
+            if not (backgroundInputBlocked ()) then
                 selectedPackage ()
                 |> Option.filter (fun _ -> projection.ListIsInteractive)
                 |> Option.iter (fun package -> dispatch (ShowReadme package.Id)))
@@ -1137,11 +1220,11 @@ type ExplorerWindow
         previewButtons
         |> List.iter (fun (tab, button) ->
             button.Accepting.Add(fun _ ->
-                if not (operationOwnsInput ()) && not helpOpen then
+                if not (backgroundInputBlocked ()) then
                     dispatch (SelectPreviewTab tab)))
 
         source.Accepting.Add(fun _ ->
-            if not (operationOwnsInput ()) && not helpOpen then
+            if not (backgroundInputBlocked ()) then
                 let value =
                     if String.IsNullOrWhiteSpace source.Text then
                         None
@@ -1152,12 +1235,12 @@ type ExplorerWindow
                 dispatch SubmitSearch)
 
         search.Accepting.Add(fun _ ->
-            if not (operationOwnsInput ()) && not helpOpen then
+            if not (backgroundInputBlocked ()) then
                 dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
                 dispatch SubmitSearch)
 
         prerelease.ValueChanged.Add(fun args ->
-            if not rendering && not (operationOwnsInput ()) && not helpOpen then
+            if not rendering && not (backgroundInputBlocked ()) then
                 dispatch (ChangeSearch(search.Text, args.NewValue = CheckState.Checked))
                 dispatch SubmitSearch)
 

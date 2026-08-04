@@ -1,5 +1,6 @@
 namespace Dotnet.PackageExplorer.Terminal.UnitTests
 
+open System
 open Dotnet.PackageExplorer.Application
 open Dotnet.PackageExplorer.Terminal
 open FsUnit.Xunit
@@ -304,4 +305,31 @@ type PresentationTests() =
             actual.ContextTitle |> should equal "Package Explorer"
             actual.Context |> should equal problem.Message
             actual.Route |> should equal "Failure"
-            actual.Actions.Contains("1-4 jump") |> should equal true)
+            actual.Actions.Contains("Esc dismiss") |> should equal true
+            actual.Actions.Contains("? Help") |> should equal true
+            actual.Actions.Contains(Environment.NewLine) |> should equal false)
+
+    [<Fact>]
+    member _.``every route supplies one contextual guidance row with Help discoverable``() =
+        let progress =
+            { Preview = preview.Id
+              Operation = OperationId "operation-1"
+              Completed = 1
+              Total = 2
+              Status = "Restoring projects" }
+
+        let routes =
+            [ Content PackageList
+              Content(PackageDetails direct.Id)
+              Content(PackageReadme direct.Id)
+              Content(PackageTargeting direct.Id)
+              Content(OperationPreview(preview, Summary))
+              Content(OperationConfirmation preview)
+              Content(OperationProgress progress) ]
+
+        routes
+        |> List.iter (fun route ->
+            let actual = { model () with Route = route } |> Presentation.project 90
+
+            actual.Actions.Contains("? Help") |> should equal true
+            actual.Actions.Contains(Environment.NewLine) |> should equal false)

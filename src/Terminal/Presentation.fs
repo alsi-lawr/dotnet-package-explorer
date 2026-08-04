@@ -274,10 +274,15 @@ module internal Presentation =
         let completed = Math.Clamp(percentage, 0, 100) * width / 100
         "[" + String('#', completed) + String('.', width - completed) + "]"
 
-    let private packageActions =
-        "Tab modes | 1-4 jump | j/k rows | h/l tabs | C-h/C-l panes | s sort"
-        + "\n/ search | Space select | Enter details | p preview | r refresh | "
-        + "Esc back | q quit | ? Help"
+    let private routeActions =
+        function
+        | PackageList -> "j/k move | Space select | Enter details | p preview | ? Help"
+        | PackageDetails _
+        | PackageReadme _ -> "h/l tabs | C-h/C-l panes | p preview | Esc back | ? Help"
+        | PackageTargeting _ -> "j/k move | Space select | p preview | Esc back | ? Help"
+        | OperationPreview _ -> "h/l tabs | Enter apply | Esc back | ? Help"
+        | OperationConfirmation _
+        | OperationProgress _ -> "? Help"
 
     let private ownsFailureInput =
         function
@@ -445,7 +450,11 @@ j/k move | Space select project and all frameworks | p preview
             + "Press Esc to dismiss this message.",
             "Esc dismiss | ? Help",
             "Packages / Failure"
-        | Some problem -> "Package Explorer", problem.Message, packageActions, "Failure"
+        | Some problem ->
+            "Package Explorer",
+            problem.Message,
+            $"Esc dismiss | {routeActions contentRoute}",
+            "Failure"
         | None ->
             match contentRoute with
             | PackageList ->
@@ -453,32 +462,32 @@ j/k move | Space select project and all frameworks | p preview
                 | Some package ->
                     "Workspace Explorer / Packages",
                     detailsMarkdown model package,
-                    packageActions,
+                    routeActions contentRoute,
                     "Packages / List"
                 | None when List.isEmpty model.Packages ->
                     "Workspace Explorer / Packages",
                     "Package information will appear here when results are available.",
-                    packageActions,
+                    routeActions contentRoute,
                     "Packages / List"
                 | None ->
                     "Workspace Explorer / Packages",
                     "Select a package and press Enter to open its details.",
-                    packageActions,
+                    routeActions contentRoute,
                     "Packages / List"
             | PackageDetails package ->
                 "Workspace Explorer / Packages",
                 detailsMarkdown model package,
-                packageActions,
+                routeActions contentRoute,
                 "Packages / Details"
             | PackageReadme package ->
                 "Workspace Explorer / Packages",
                 readmeMarkdown model package,
-                packageActions,
+                routeActions contentRoute,
                 "Packages / README"
             | PackageTargeting package ->
                 "Workspace Explorer / Packages",
                 targetingMarkdown model package,
-                packageActions,
+                routeActions contentRoute,
                 "Packages / Targets"
             | OperationPreview(preview, tab) ->
                 let tabName =
@@ -490,7 +499,7 @@ j/k move | Space select project and all frameworks | p preview
 
                 "Workspace Explorer / Packages",
                 previewMarkdown preview tab,
-                packageActions,
+                routeActions contentRoute,
                 "Packages / " + tabName
             | OperationConfirmation preview ->
                 let count = operationPackageCount preview.Operation

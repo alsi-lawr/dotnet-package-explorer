@@ -67,9 +67,12 @@ type AnsiDriverTests() =
         |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
 
         application.Run window |> ignore
-        Driver.text application.Driver
+        Driver.rows application.Driver
 
-    let render width initial = renderWithKeys width 35 initial []
+    let renderTextWithKeys width height initial keys =
+        renderWithKeys width height initial keys |> String.concat Environment.NewLine
+
+    let render width initial = renderTextWithKeys width 35 initial []
 
     [<Fact>]
     member _.``Terminal Gui v2 instance host renders one bounded ANSI driver iteration``() =
@@ -101,6 +104,103 @@ type AnsiDriverTests() =
         wide.Contains("Versions", StringComparison.Ordinal) |> should equal true
 
     [<Fact>]
+    member _.``compact routes reserve one guidance row and one combined status route row``() =
+        let failure =
+            { Scope = BackendSessionFailure
+              Kind = BackendUnavailable
+              Message = "Workspace Explorer is unavailable." }
+
+        let routes =
+            [ model (), "Enter details", "Ready", "Packages / List"
+              { model () with
+                  Route = Content(OperationConfirmation preview)
+                  Pending.Apply = Some(RequestToken 20L) },
+              "? Help",
+              "Applying package changes",
+              "Packages / Applying"
+              { model () with
+                  Route = Failure(PackageList, BackendSessionFailure)
+                  Failures = Map.ofList [ BackendSessionFailure, failure ] },
+              "Esc dismiss",
+              "Action required",
+              "Packages / Failure" ]
+
+        routes
+        |> List.iter (fun (initial, expectedAction, expectedStatus, expectedRoute) ->
+            let rows = renderWithKeys 90 30 initial []
+
+            let guidanceRow =
+                rows |> List.findIndex (_.Contains(expectedAction, StringComparison.Ordinal))
+
+            let statusRow =
+                rows
+                |> List.findIndex (fun row ->
+                    row.Contains(expectedStatus, StringComparison.Ordinal)
+                    && row.Contains(expectedRoute, StringComparison.Ordinal))
+
+            guidanceRow |> should equal (rows.Length - 3)
+            statusRow |> should equal (rows.Length - 2)
+            guidanceRow |> should equal (statusRow - 1)
+            rows[guidanceRow].Contains("? Help") |> should equal true)
+
+    [<Fact>]
+    member _.``Help is a complete masked surface at wide and compact sizes``() =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let help = renderTextWithKeys width height (model ()) [ Key '?' ]
+
+            [ "Current actions"
+              "Tab / Shift-Tab"
+              "1-4"
+              "j / k"
+              "h / l"
+              "Ctrl-h / Ctrl-l"
+              "s"
+              "/"
+              "Space"
+              "Enter"
+              "p"
+              "r"
+              "? / Esc"
+              "q" ]
+            |> List.iter (fun binding ->
+                help.Contains(binding, StringComparison.Ordinal) |> should equal true)
+
+            help.Contains("Enter details") |> should equal true
+            help.Contains("Direct.Package") |> should equal false)
+
+    [<Fact>]
+    member _.``sort is a focused masked surface with local guidance``() =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let field = renderTextWithKeys width height (model ()) [ Key.S ]
+
+            let initialDirection =
+                match (model ()).Sort.Direction with
+                | Ascending -> "Ascending"
+                | Descending -> "Descending"
+
+            field.Contains("[s] Sort packages") |> should equal true
+            field.Contains("> Field") |> should equal true
+            field.Contains($"Direction   {initialDirection}") |> should equal true
+            field.Contains("Enter Apply") |> should equal true
+            field.Contains("Esc Close") |> should equal true
+            field.Contains("? Help") |> should equal true
+            field.Contains("Direct.Package") |> should equal false
+            field.Contains("Ready") |> should equal false
+            field.Contains("j/k move") |> should equal false
+
+            let direction = renderTextWithKeys width height (model ()) [ Key.S; Key.J ]
+
+            direction.Contains("> Direction") |> should equal true
+
+            let help = renderTextWithKeys width height (model ()) [ Key.S; Key '?' ]
+
+            help.Contains("Current actions") |> should equal true
+            help.Contains("h/l field") |> should equal true
+            help.Contains("[s] Sort packages") |> should equal false)
+
+    [<Fact>]
     member _.``wide and compact lists show focus semantics and responsive version deltas``() =
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
@@ -111,7 +211,7 @@ type AnsiDriverTests() =
                     ActivePackage = Some longPackage.Id
                     SelectedPackages = Set.singleton central.Id }
 
-            let screen = renderWithKeys width height initial []
+            let screen = renderTextWithKeys width height initial []
             screen.Contains("Current") |> should equal true
             screen.Contains("Latest") |> should equal true
             screen.Contains("Kind") |> should equal true
@@ -133,7 +233,7 @@ type AnsiDriverTests() =
                     Query.Text = "missing"
                     Packages = []
                     ActivePackage = None }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| []
 
             empty.Contains("No packages found.") |> should equal true
@@ -144,7 +244,7 @@ type AnsiDriverTests() =
                 { model () with
                     Mode = Browse
                     Pending.Search = Some(RequestToken 40L) }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| []
 
             loading.Contains("Searching packages...") |> should equal true
@@ -172,7 +272,7 @@ type AnsiDriverTests() =
                     Route = Content(OperationPreview(preview, Summary)) }
 
             let confirmationScreen =
-                renderWithKeys width height confirmation [ Key.L.WithCtrl; Key.Enter ]
+                renderTextWithKeys width height confirmation [ Key.L.WithCtrl; Key.Enter ]
 
             confirmationScreen.Contains("Apply package changes?") |> should equal true
             confirmationScreen.Contains("[Enter] Apply") |> should equal true
@@ -184,13 +284,13 @@ type AnsiDriverTests() =
                     Route = Content(OperationConfirmation preview)
                     Pending.Apply = Some(RequestToken 20L) }
 
-            let applying = renderWithKeys width height applyingState []
+            let applying = renderTextWithKeys width height applyingState []
 
             applying.Contains("Applying changes for 2 packages.") |> should equal true
             applying.Contains("? Help") |> should equal true
             applying.Contains("Direct.Package") |> should equal false
 
-            let help = renderWithKeys width height applyingState [ Key '?' ]
+            let help = renderTextWithKeys width height applyingState [ Key '?' ]
             help.Contains("Current actions") |> should equal true
             help.Contains("? / Esc") |> should equal true
             help.Contains("Close help") |> should equal true
@@ -199,7 +299,7 @@ type AnsiDriverTests() =
                 { model () with
                     Route = Content(OperationProgress progress)
                     Pending.Apply = Some(RequestToken 20L) }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| []
 
             progressing.Contains("Current step: Restoring projects") |> should equal true
@@ -210,7 +310,7 @@ type AnsiDriverTests() =
                 { model () with
                     Route = Failure(PackageList, BackendSessionFailure)
                     Failures = Map.ofList [ BackendSessionFailure, failure ] }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| []
 
             failed.Contains(failure.Message) |> should equal true
@@ -236,7 +336,7 @@ type AnsiDriverTests() =
                                 [ ProjectId "Web",
                                   Set.ofList
                                       [ TargetFramework "net10.0"; TargetFramework "net9.0" ] ] } }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| [ Key.L.WithCtrl ]
 
             target.Contains("Workspace Explorer / Packages") |> should equal true
@@ -264,7 +364,7 @@ type AnsiDriverTests() =
             let dependencyPreview =
                 { model () with
                     Route = Content(OperationPreview(preview, Dependencies)) }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| [ Key.L.WithCtrl ]
 
             dependencyPreview.Contains("Dependency [4.3.0,)") |> should equal true
@@ -273,7 +373,7 @@ type AnsiDriverTests() =
             let filePreview =
                 { model () with
                     Route = Content(OperationPreview(preview, Files)) }
-                |> renderWithKeys width height
+                |> renderTextWithKeys width height
                 <| [ Key.L.WithCtrl ]
 
             filePreview.Contains("Changed: src/Web/Web.fsproj") |> should equal true
@@ -301,7 +401,7 @@ dotnet add package Direct.Package --source https://api.nuget.org/v3/index.json -
 
         [ 126, 34; 90, 30 ]
         |> List.iter (fun (width, height) ->
-            let screen = renderWithKeys width height initial [ Key.L.WithCtrl ]
+            let screen = renderTextWithKeys width height initial [ Key.L.WithCtrl ]
             screen.Contains("prose-tail") |> should equal true
             screen.Contains("command-tail") |> should equal true)
 
