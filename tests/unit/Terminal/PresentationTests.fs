@@ -16,6 +16,20 @@ type PresentationTests() =
             (Some "1.2.3-alpha.1")
             (Some "10.0.0-rc.2")
 
+    let dependencyInjection =
+        package
+            "Microsoft.Extensions.DependencyInjection"
+            (Some Direct)
+            (Some "8.0.0")
+            (Some "9.0.0")
+
+    let solutionPersistence =
+        package
+            "Microsoft.VisualStudio.SolutionPersistence"
+            (Some Central)
+            (Some "1.0.0")
+            (Some "1.1.0")
+
     [<Fact>]
     member _.``each package mode projects a distinct non-flat package hierarchy``() =
         let initial = model ()
@@ -52,7 +66,7 @@ type PresentationTests() =
           Updates, [ "Current"; "Latest"; "Kind" ]
           Consolidate, [ "Current"; "Latest"; "Kind" ] ]
         |> List.iter (fun (mode, headings) ->
-            [ 126, 51; 90, 86 ]
+            [ 126, 76; 90, 86 ]
             |> List.iter (fun (columns, maximumRowWidth) ->
                 let actual =
                     { model () with
@@ -77,6 +91,32 @@ type PresentationTests() =
                     actual.Rows.Head.Contains("10.0.0-rc.2") |> should equal true
                 | Browse
                 | Installed -> ()))
+
+    [<Fact>]
+    member _.``wide and compact package lists retain complete audited package identities``() =
+        [ Browse, [ "Version"; "Source" ]
+          Installed, [ "Version"; "Kind" ]
+          Updates, [ "Current"; "Latest"; "Kind" ]
+          Consolidate, [ "Current"; "Latest"; "Kind" ] ]
+        |> List.iter (fun (mode, headings) ->
+            [ 126; 90 ]
+            |> List.iter (fun columns ->
+                let actual =
+                    { model () with
+                        Mode = mode
+                        Packages = [ dependencyInjection; solutionPersistence ]
+                        ActivePackage = Some dependencyInjection.Id }
+                    |> Presentation.project columns
+
+                headings
+                |> List.iter (fun heading ->
+                    actual.ListHeading.Contains heading |> should equal true)
+
+                [ dependencyInjection; solutionPersistence ]
+                |> List.iter (fun package ->
+                    actual.Rows
+                    |> List.exists (_.Contains(package.DisplayName))
+                    |> should equal true)))
 
     [<Fact>]
     member _.``package focus remains separate from relationship color and multi-selection``() =
@@ -117,6 +157,8 @@ type PresentationTests() =
                 actual.ListIsInteractive |> should equal false
                 actual.ListNotice.Value.Contains(expectedNotice) |> should equal true
                 actual.Context.Contains("Select a package") |> should equal false
+                actual.ListTitle.Contains("Sort: Package, ascending") |> should equal true
+                actual.ListTitle.Contains("[s]") |> should equal false
                 actual.Actions |> should equal expectedActions))
 
     [<Fact>]
@@ -153,8 +195,27 @@ type PresentationTests() =
                 actual.ListNotice.Value.Contains("package actions are paused")
                 |> should equal true
 
-                actual.Rows |> List.forall (fun row -> row[1] = '~') |> should equal true
+                actual.ListTitle.Contains("Sort: Package, ascending") |> should equal true
+                actual.ListTitle.Contains("[s]") |> should equal false
+                actual.Rows.Head.StartsWith(">~") |> should equal true
+                actual.Rows[1].StartsWith(" ~") |> should equal true
+                actual.Rows |> List.exists (_.StartsWith("~~")) |> should equal false
                 actual.Actions |> should equal "Tab/1-4 modes | Esc cancel | ? Help"))
+
+    [<Fact>]
+    member _.``interactive list titles expose the active sort field direction and shortcut``() =
+        [ Browse; Installed; Updates; Consolidate ]
+        |> List.iter (fun mode ->
+            [ 126; 90 ]
+            |> List.iter (fun columns ->
+                let actual =
+                    { model () with
+                        Mode = mode
+                        Sort = { Field = Name; Direction = Descending } }
+                    |> Presentation.project columns
+
+                actual.ListIsInteractive |> should equal true
+                actual.ListTitle.Contains("Sort: Package, descending [s]") |> should equal true))
 
     [<Fact>]
     member _.``wide previews preserve the package list and expose every preview tab``() =

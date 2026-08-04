@@ -146,7 +146,7 @@ type ExplorerWindow
         new FrameView(
             X = Pos.Absolute 0,
             Y = Pos.Bottom searchFrame,
-            Width = Dim.Percent 45,
+            Width = Dim.Percent Presentation.WideListPercentage,
             Height = Dim.Fill 2,
             BorderStyle = LineStyle.Rounded
         )
@@ -327,7 +327,7 @@ type ExplorerWindow
     let readmeCodeWidth columns =
         match Presentation.width columns with
         | Narrow -> max 20 (columns - 8)
-        | Wide -> max 20 (columns - (columns * 45 / 100) - 8)
+        | Wide -> max 20 (columns - (columns * Presentation.WideListPercentage / 100) - 8)
 
     let wrapCodeLine width (line: string) =
         let rec wrap (remaining: string) =
@@ -577,7 +577,7 @@ type ExplorerWindow
             prerelease.Y <- Pos.Absolute 0
 
             listFrame.X <- Pos.Absolute 0
-            listFrame.Width <- Dim.Percent 45
+            listFrame.Width <- Dim.Percent Presentation.WideListPercentage
             contextFrame.X <- Pos.Right listFrame
             contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()

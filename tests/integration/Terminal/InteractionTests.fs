@@ -238,6 +238,24 @@ type InteractionTests() =
                 runAt width height initial [ Key.Esc ] |> should equal [ Cancel request ]))
 
     [<Fact>]
+    member _.``empty package lists keep sort gated at wide and compact sizes``() =
+        [ Browse; Installed; Updates; Consolidate ]
+        |> List.iter (fun mode ->
+            let empty =
+                { model () with
+                    Mode = mode
+                    Packages = []
+                    ActivePackage = None }
+
+            [ 126, 34; 90, 30 ]
+            |> List.iter (fun (width, height) ->
+                runAt width height empty [ Key.S; Key.J; Key.Enter ]
+                |> List.exists (function
+                    | ChangeSort _ -> true
+                    | _ -> false)
+                |> should equal false))
+
+    [<Fact>]
     member _.``operation routes block package commands and Help owns input until it closes``() =
         let progress =
             { Preview = preview.Id

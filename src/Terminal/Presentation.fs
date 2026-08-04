@@ -27,6 +27,9 @@ module internal Presentation =
     [<Literal>]
     let NarrowBoundary = 100
 
+    [<Literal>]
+    let WideListPercentage = 65
+
     let width columns =
         if columns < NarrowBoundary then Narrow else Wide
 
@@ -85,7 +88,7 @@ module internal Presentation =
     let private listContentWidth columns =
         match width columns with
         | Narrow -> max 20 (columns - 4)
-        | Wide -> max 20 (columns * 45 / 100 - 5)
+        | Wide -> max 20 (columns * WideListPercentage / 100 - 5)
 
     let private listPending (model: Model) =
         if model.Pending.Preview.IsSome then
@@ -200,10 +203,7 @@ module internal Presentation =
             | Updates
             | Consolidate -> selected
 
-        let focus =
-            if model.ActivePackage = Some package.Id then ">"
-            elif isPending then "~"
-            else " "
+        let focus = if model.ActivePackage = Some package.Id then ">" else " "
 
         let stale = if isPending then "~" else " "
 
@@ -402,7 +402,11 @@ module internal Presentation =
 
         $"""**Package:** {packageId package}
 
-j/k move | Space select project and all frameworks | p preview
+j/k move
+
+Space select project and all frameworks
+
+p preview
 
 \[>\] focused | \[x\] selected
 
@@ -548,6 +552,7 @@ j/k move | Space select project and all frameworks | p preview
         let layout = rowLayout contentWidth model
         let isPending = listPending model |> Option.isSome
         let notice = listNotice model
+        let listIsInteractive = notice.IsNone
 
         let actions =
             match model.Route with
@@ -591,10 +596,12 @@ j/k move | Space select project and all frameworks | p preview
 
         { Modes = modes
           Search = $"/ {model.Query.Text} | {source}"
-          ListTitle = $"{modeTitle model} | Sort: {sortName model.Sort} [s]"
+          ListTitle =
+            $"{modeTitle model} | Sort: {sortName model.Sort}"
+            + if listIsInteractive then " [s]" else ""
           ListHeading = rowHeading layout model
           ListNotice = notice
-          ListIsInteractive = notice.IsNone
+          ListIsInteractive = listIsInteractive
           Rows = model.Packages |> List.map (row layout isPending model)
           ContextTitle = contextTitle
           Context = context

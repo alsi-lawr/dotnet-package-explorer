@@ -52,6 +52,20 @@ type AnsiDriverTests() =
             (Some "1.2.3-alpha.1")
             (Some "10.0.0-rc.2")
 
+    let dependencyInjection =
+        package
+            "Microsoft.Extensions.DependencyInjection"
+            (Some Direct)
+            (Some "8.0.0")
+            (Some "9.0.0")
+
+    let solutionPersistence =
+        package
+            "Microsoft.VisualStudio.SolutionPersistence"
+            (Some Central)
+            (Some "1.0.0")
+            (Some "1.1.0")
+
     let renderWithKeys width height initial keys =
         use application = Application.Create().Init "ansi"
 
@@ -223,6 +237,100 @@ type AnsiDriverTests() =
 
             if width = 90 then
                 screen.Contains(longPackage.DisplayName) |> should equal true)
+
+    [<Fact>]
+    member _.``wide and compact ANSI lists retain audited identities and comparison columns``() =
+        [ Browse, [ "Version"; "Source" ]
+          Installed, [ "Version"; "Kind" ]
+          Updates, [ "Current"; "Latest"; "Kind" ]
+          Consolidate, [ "Current"; "Latest"; "Kind" ] ]
+        |> List.iter (fun (mode, headings) ->
+            [ 126, 34; 90, 30 ]
+            |> List.iter (fun (width, height) ->
+                let initial =
+                    { model () with
+                        Mode = mode
+                        Packages = [ dependencyInjection; solutionPersistence ]
+                        ActivePackage = Some dependencyInjection.Id }
+
+                let screen = renderTextWithKeys width height initial []
+
+                [ dependencyInjection.DisplayName; solutionPersistence.DisplayName ]
+                |> List.iter (fun packageId ->
+                    if not (screen.Contains(packageId, StringComparison.Ordinal)) then
+                        failwith
+                            $"{mode} at {width} columns clipped {packageId}.{Environment.NewLine}{screen}")
+
+                headings
+                |> List.iter (fun heading ->
+                    screen.Contains(heading, StringComparison.Ordinal) |> should equal true)
+
+                if width = 126 then
+                    screen.Contains("Loading package details...", StringComparison.Ordinal)
+                    |> should equal true))
+
+    [<Fact>]
+    member _.``list sort status and affordance match interactive empty and loading state``() =
+        let pending mode =
+            match mode with
+            | Browse ->
+                { model () with
+                    Mode = mode
+                    Pending.Search = Some(RequestToken 50L) }
+            | Installed ->
+                { model () with
+                    Mode = mode
+                    Pending.Refresh = Some(RequestToken 51L) }
+            | Updates ->
+                { model () with
+                    Mode = mode
+                    Pending.Updates = Some(RequestToken 52L) }
+            | Consolidate ->
+                { model () with
+                    Mode = mode
+                    Pending.Consolidation = Some(RequestToken 53L) }
+
+        let sorted (initial: Model) =
+            { initial with
+                Sort = { Field = Name; Direction = Descending } }
+
+        [ Browse; Installed; Updates; Consolidate ]
+        |> List.iter (fun mode ->
+            [ 126, 34; 90, 30 ]
+            |> List.iter (fun (width, height) ->
+                let normal =
+                    { model () with Mode = mode }
+                    |> sorted
+                    |> fun initial -> renderTextWithKeys width height initial []
+
+                normal.Contains("Sort: Package, descending [s]", StringComparison.Ordinal)
+                |> should equal true
+
+                let empty =
+                    { model () with
+                        Mode = mode
+                        Packages = []
+                        ActivePackage = None }
+                    |> sorted
+                    |> fun initial -> renderTextWithKeys width height initial []
+
+                empty.Contains("Sort: Package, descending", StringComparison.Ordinal)
+                |> should equal true
+
+                empty.Contains("[s]", StringComparison.Ordinal) |> should equal false
+
+                let loading =
+                    pending mode
+                    |> sorted
+                    |> fun initial -> renderTextWithKeys width height initial []
+
+                loading.Contains("Sort: Package, descending", StringComparison.Ordinal)
+                |> should equal true
+
+                loading.Contains("[s]", StringComparison.Ordinal) |> should equal false
+                loading.Contains(">~", StringComparison.Ordinal) |> should equal true
+                loading.Contains(" ~", StringComparison.Ordinal) |> should equal true
+                loading.Contains("~~", StringComparison.Ordinal) |> should equal false))
 
     [<Fact>]
     member _.``empty and loading lists keep footer and Help actions truthful and identical``() =
