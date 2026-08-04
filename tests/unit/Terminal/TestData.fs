@@ -111,6 +111,7 @@ module TestData =
         |> fun model ->
             { model with
                 ActivePackage = Some direct.Id
+                Pending = PendingRequests.empty
                 Details =
                     Map.ofList
                         [ direct.Id,

@@ -11,6 +11,9 @@ type TerminalProjection =
     { Modes: string list
       Search: string
       ListTitle: string
+      ListHeading: string
+      ListNotice: string option
+      ListIsInteractive: bool
       Rows: string list
       ContextTitle: string
       Context: string
@@ -43,10 +46,12 @@ module internal Presentation =
         | None -> "Available"
 
     let private fit width (value: string) =
-        if value.Length <= width then
-            value
-        else
-            value[.. width - 3] + ".."
+        if width <= 0 then ""
+        elif value.Length <= width then value
+        elif width <= 2 then value[.. width - 1]
+        else value[.. width - 3] + ".."
+
+    let private pad width value = (fit width value).PadRight width
 
     let private modeName =
         function
@@ -77,7 +82,111 @@ module internal Presentation =
         | Updates -> "Available updates"
         | Consolidate -> "Version differences"
 
-    let private row (model: Model) (package: PackageSummary) =
+    let private listContentWidth columns =
+        match width columns with
+        | Narrow -> max 20 (columns - 4)
+        | Wide -> max 20 (columns * 45 / 100 - 5)
+
+    let private listPending (model: Model) =
+        if model.Pending.Preview.IsSome then
+            Some "Building preview"
+        elif model.Pending.Refresh.IsSome then
+            Some "Refreshing installed packages"
+        else
+            match model.Mode with
+            | Browse when model.Pending.Search.IsSome -> Some "Searching packages"
+            | Updates when model.Pending.Updates.IsSome -> Some "Finding package updates"
+            | Consolidate when model.Pending.Consolidation.IsSome ->
+                Some "Finding version differences"
+            | Browse
+            | Installed
+            | Updates
+            | Consolidate -> None
+
+    let private listNotice (model: Model) =
+        match listPending model, model.Packages with
+        | Some label, [] -> Some $"{label}..."
+        | Some label, _ -> Some $"{label}... ~ marks previous results; package actions are paused."
+        | None, [] ->
+            match model.Mode with
+            | Browse -> Some "No packages found. Press / to change the search or filters."
+            | Installed -> Some "No installed packages. Press 1 to browse packages."
+            | Updates -> Some "No updates found. Press / to change filters or r to refresh."
+            | Consolidate ->
+                Some "No version differences found. Press / to change filters or r to refresh."
+        | None, _ -> None
+
+    let private sourceName (package: PackageSummary) =
+        package.Source
+        |> Option.map (fun (PackageSource value) -> value)
+        |> Option.defaultValue "unknown"
+
+    let private maxLength fallback maximum values =
+        values |> List.map String.length |> List.fold max fallback |> min maximum
+
+    type private RowLayout =
+        { Name: int
+          Current: int
+          Latest: int
+          Tail: int }
+
+    let private rowLayout contentWidth (model: Model) =
+        let currentWidth =
+            model.Packages
+            |> List.map (_.InstalledVersion >> packageVersion)
+            |> maxLength 7 16
+
+        let latestWidth =
+            model.Packages |> List.map (_.LatestVersion >> packageVersion) |> maxLength 7 16
+
+        let tailWidth =
+            match model.Mode with
+            | Browse -> model.Packages |> List.map sourceName |> maxLength 6 16
+            | Installed
+            | Updates
+            | Consolidate -> model.Packages |> List.map (_.Kind >> packageKind) |> maxLength 6 10
+
+        let prefixWidth =
+            match model.Mode with
+            | Browse
+            | Installed -> 2
+            | Updates
+            | Consolidate -> 6
+
+        let fixedWidth =
+            match model.Mode with
+            | Browse -> prefixWidth + 1 + latestWidth + 1 + tailWidth
+            | Installed -> prefixWidth + 1 + currentWidth + 1 + tailWidth
+            | Updates
+            | Consolidate -> prefixWidth + 1 + currentWidth + 4 + latestWidth + 1 + tailWidth
+
+        { Name = max 8 (contentWidth - fixedWidth)
+          Current = currentWidth
+          Latest = latestWidth
+          Tail = tailWidth }
+
+    let private rowHeading layout (model: Model) =
+        match model.Mode with
+        | Browse ->
+            "  "
+            + pad layout.Name "Package"
+            + " "
+            + pad layout.Latest "Version"
+            + " "
+            + fit layout.Tail "Source"
+        | Installed ->
+            "  " + pad layout.Name "Package" + " " + pad layout.Current "Version" + " Kind"
+        | Updates
+        | Consolidate ->
+            "  Sel "
+            + pad layout.Name "Package"
+            + " "
+            + pad layout.Current "Current"
+            + " -> "
+            + pad layout.Latest "Latest"
+            + " Kind"
+
+    let private row layout isPending (model: Model) (package: PackageSummary) =
         let selected =
             if model.SelectedPackages.Contains package.Id then
                 "[x]"
@@ -87,21 +196,62 @@ module internal Presentation =
         let marker =
             match model.Mode with
             | Browse
-            | Installed -> "   "
+            | Installed -> ""
             | Updates
             | Consolidate -> selected
 
+        let focus =
+            if model.ActivePackage = Some package.Id then ">"
+            elif isPending then "~"
+            else " "
+
+        let stale = if isPending then "~" else " "
+
         let current = packageVersion package.InstalledVersion
         let latest = packageVersion package.LatestVersion
-        let state = packageKind package.Kind
         let name = package.DisplayName
 
         match model.Mode with
-        | Browse -> $"{marker} {fit 20 name, -20} {fit 8 latest, -8} {state}"
-        | Installed -> $"{marker} {fit 20 name, -20} {fit 8 current, -8} {state}"
+        | Browse ->
+            focus
+            + stale
+            + pad layout.Name name
+            + " "
+            + pad layout.Latest latest
+            + " "
+            + fit layout.Tail (sourceName package)
+        | Installed ->
+            focus
+            + stale
+            + pad layout.Name name
+            + " "
+            + pad layout.Current current
+            + " "
+            + $"{packageKind package.Kind}"
         | Updates ->
-            $"{marker} {fit 15 name, -15} {fit 6 current, -6} -> {fit 6 latest, -6} {state}"
-        | Consolidate -> $"{marker} {fit 20 name, -20} {fit 8 current, -8} {state}"
+            focus
+            + stale
+            + marker
+            + " "
+            + pad layout.Name name
+            + " "
+            + pad layout.Current current
+            + " -> "
+            + pad layout.Latest latest
+            + " "
+            + $"{packageKind package.Kind}"
+        | Consolidate ->
+            focus
+            + stale
+            + marker
+            + " "
+            + pad layout.Name name
+            + " "
+            + pad layout.Current current
+            + " -> "
+            + pad layout.Latest latest
+            + " "
+            + $"{packageKind package.Kind}"
 
     let private targetName (target: WorkspaceTarget) =
         match target with
@@ -283,6 +433,11 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
                 match model.ActivePackage with
                 | Some package ->
                     packageId package, detailsMarkdown model package, packageActions, "List"
+                | None when List.isEmpty model.Packages ->
+                    "Package details",
+                    "Package information will appear here when results are available.",
+                    packageActions,
+                    "List"
                 | None ->
                     "Package details",
                     "Select a package and press Enter to open its details.",
@@ -344,6 +499,10 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
     let project columns (model: Model) =
         let contextTitle, context, actions, route = content model
         let active = modeName model.Mode
+        let contentWidth = listContentWidth columns
+        let layout = rowLayout contentWidth model
+        let isPending = listPending model |> Option.isSome
+        let notice = listNotice model
 
         let modes =
             [ Browse; Installed; Updates; Consolidate ]
@@ -382,7 +541,10 @@ Use j/k to choose a project. Space selects it and its frameworks. Press p to pre
         { Modes = modes
           Search = $"/ {model.Query.Text} | {source}"
           ListTitle = $"{modeTitle model} | Sort: {sortName model.Sort} [s]"
-          Rows = model.Packages |> List.map (row model)
+          ListHeading = rowHeading layout model
+          ListNotice = notice
+          ListIsInteractive = notice.IsNone
+          Rows = model.Packages |> List.map (row layout isPending model)
           ContextTitle = contextTitle
           Context = context
           Actions = actions

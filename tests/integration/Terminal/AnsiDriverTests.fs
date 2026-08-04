@@ -45,6 +45,13 @@ module private Driver =
 
 [<Sealed>]
 type AnsiDriverTests() =
+    let longPackage =
+        package
+            "Microsoft.Extensions.DependencyInjection"
+            (Some Direct)
+            (Some "1.2.3-alpha.1")
+            (Some "10.0.0-rc.2")
+
     let renderWithKeys width height initial keys =
         use application = Application.Create().Init "ansi"
 
@@ -92,6 +99,57 @@ type AnsiDriverTests() =
         let wide = render 160 details
         wide.Contains("Central.Package", StringComparison.Ordinal) |> should equal true
         wide.Contains("Versions", StringComparison.Ordinal) |> should equal true
+
+    [<Fact>]
+    member _.``wide and compact lists show focus semantics and responsive version deltas``() =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let initial =
+                { model () with
+                    Mode = Updates
+                    Packages = [ longPackage; central ]
+                    ActivePackage = Some longPackage.Id
+                    SelectedPackages = Set.singleton central.Id }
+
+            let screen = renderWithKeys width height initial []
+            screen.Contains("Current") |> should equal true
+            screen.Contains("Latest") |> should equal true
+            screen.Contains("Kind") |> should equal true
+            screen.Contains("> [ ]") |> should equal true
+            screen.Contains("  [x]") |> should equal true
+            screen.Contains("1.2.3-alpha.1") |> should equal true
+            screen.Contains("10.0.0-rc.2") |> should equal true
+
+            if width = 90 then
+                screen.Contains(longPackage.DisplayName) |> should equal true)
+
+    [<Fact>]
+    member _.``empty and loading lists render local recovery and stale-result notices``() =
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let empty =
+                { model () with
+                    Mode = Browse
+                    Query.Text = "missing"
+                    Packages = []
+                    ActivePackage = None }
+                |> renderWithKeys width height
+                <| []
+
+            empty.Contains("No packages found.") |> should equal true
+            empty.Contains("Press / to change") |> should equal true
+            empty.Contains("Select a package") |> should equal false
+
+            let loading =
+                { model () with
+                    Mode = Browse
+                    Pending.Search = Some(RequestToken 40L) }
+                |> renderWithKeys width height
+                <| []
+
+            loading.Contains("Searching packages...") |> should equal true
+            loading.Contains("previous results") |> should equal true
+            loading.Contains(">~") |> should equal true)
 
     [<Fact>]
     member _.``wide and compact operation states keep lifecycle actions and failures visible``() =

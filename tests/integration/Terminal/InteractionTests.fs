@@ -163,6 +163,37 @@ type InteractionTests() =
         run pending [ Key.Esc ] |> should equal [ Cancel RefreshRequest ]
 
     [<Fact>]
+    member _.``retained package rows do not dispatch package actions while list data is pending``
+        ()
+        =
+        let browse =
+            { model () with
+                Mode = Browse
+                Pending.Search = Some(RequestToken 40L) }
+
+        let preview =
+            { model () with
+                Pending.Preview = Some(RequestToken 41L) }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            [ browse; preview ]
+            |> List.iter (fun pending ->
+                runAt
+                    width
+                    height
+                    pending
+                    [ Key.H.WithCtrl
+                      Key.J
+                      Key.Space
+                      Key.Enter
+                      Key.P
+                      Key.S
+                      Key.L
+                      Key.Enter ]
+                |> should be Empty))
+
+    [<Fact>]
     member _.``operation routes block package commands and Help owns input until it closes``() =
         let progress =
             { Preview = preview.Id

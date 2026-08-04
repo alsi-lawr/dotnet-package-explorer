@@ -110,11 +110,28 @@ type ExplorerWindow
     let packageList =
         new ListView(
             X = Pos.Absolute 0,
-            Y = Pos.Absolute 0,
+            Y = Pos.Absolute 1,
             Width = Dim.Fill(),
             Height = Dim.Fill(),
             BorderStyle = LineStyle.None,
             ShowMarks = false
+        )
+
+    let listHeading =
+        new Label(
+            X = Pos.Absolute 0,
+            Y = Pos.Absolute 0,
+            Width = Dim.Fill(),
+            Height = Dim.Absolute 1
+        )
+
+    let listNotice =
+        new Label(
+            X = Pos.Absolute 1,
+            Y = Pos.Absolute 1,
+            Width = Dim.Fill 2,
+            Height = Dim.Absolute 2,
+            Visible = false
         )
 
     let listFrame =
@@ -359,6 +376,26 @@ type ExplorerWindow
                 packageList.Viewport <-
                     Rectangle(oldViewport.X, restored, oldViewport.Width, oldViewport.Height)
 
+    let updateListState next =
+        listHeading.Text <- next.ListHeading
+
+        match next.ListNotice with
+        | Some notice ->
+            listNotice.Text <- notice
+            listNotice.Visible <- true
+
+            if List.isEmpty next.Rows then
+                packageList.Visible <- false
+            else
+                packageList.Y <- Pos.Absolute 3
+                packageList.Height <- Dim.Fill()
+                packageList.Visible <- true
+        | None ->
+            listNotice.Visible <- false
+            packageList.Y <- Pos.Absolute 1
+            packageList.Height <- Dim.Fill()
+            packageList.Visible <- true
+
     let setLayout width =
         let narrow = Presentation.width width = Narrow
         let showContext = narrow && narrowContext && projection.Route <> "List"
@@ -556,6 +593,7 @@ type ExplorerWindow
         listFrame.Title <- projection.ListTitle
         contextFrame.Title <- projection.ContextTitle
         updateRows projection
+        updateListState projection
 
         if context.Text <> projection.Context then
             let oldViewport = context.Viewport
@@ -620,7 +658,7 @@ type ExplorerWindow
             if not (List.isEmpty projects) then
                 targetIndex <- Math.Clamp(targetIndex + direction, 0, projects.Length - 1)
                 dispatch (SetFocus(ProjectRow projects[targetIndex].Id))
-        | _ when rows.Count > 0 ->
+        | _ when projection.ListIsInteractive && rows.Count > 0 ->
             let current = packageList.SelectedItem.GetValueOrDefault 0
             let next = Math.Clamp(current + direction, 0, rows.Count - 1)
             packageList.SelectedItem <- Nullable next
@@ -649,7 +687,7 @@ type ExplorerWindow
             | PackageTargeting _ -> false
             | _ -> true
 
-        match selectedPackage () with
+        match selectedPackage () |> Option.filter (fun _ -> projection.ListIsInteractive) with
         | None -> ()
         | Some package when
             WorkspaceTarget.supportsProjectSelection model.Target
@@ -790,6 +828,7 @@ type ExplorerWindow
                 context.SetFocus() |> ignore
             else
                 packageList.SetFocus() |> ignore
+        | OpenSort when not projection.ListIsInteractive -> ()
         | OpenSort ->
             pendingSort <- model.Sort
             sortOpen <- true
@@ -806,6 +845,7 @@ type ExplorerWindow
                     dispatch (SetProjectSelection(project.Id, selected)))
             | _ ->
                 selectedPackage ()
+                |> Option.filter (fun _ -> projection.ListIsInteractive)
                 |> Option.iter (fun package ->
                     let selected = not (model.SelectedPackages.Contains package.Id)
                     dispatch (SetPackageSelection(package.Id, selected)))
@@ -843,6 +883,7 @@ type ExplorerWindow
                 confirmationFrame.SetFocus() |> ignore
             | _ ->
                 selectedPackage ()
+                |> Option.filter (fun _ -> projection.ListIsInteractive)
                 |> Option.iter (fun package ->
                     narrowContext <- true
                     dispatch (ShowDetails package.Id))
@@ -918,6 +959,8 @@ type ExplorerWindow
         searchFrame.Add sourceLabel |> ignore
         searchFrame.Add source |> ignore
         searchFrame.Add prerelease |> ignore
+        listFrame.Add listHeading |> ignore
+        listFrame.Add listNotice |> ignore
         listFrame.Add packageList |> ignore
         contextFrame.Add detailsButton |> ignore
         contextFrame.Add readmeButton |> ignore
@@ -945,6 +988,8 @@ type ExplorerWindow
         Theme.apply schemes.Section listFrame
         Theme.apply schemes.Section contextFrame
         Theme.apply schemes.Canvas packageList
+        Theme.apply schemes.Information listHeading
+        Theme.apply schemes.Warning listNotice
         Theme.apply schemes.Canvas context
         Theme.apply schemes.Information searchLabel
         Theme.apply schemes.Information sourceLabel
@@ -978,7 +1023,12 @@ type ExplorerWindow
                 | Framework -> ()))
 
         packageList.ValueChanged.Add(fun args ->
-            if not rendering && not (operationOwnsInput ()) && not helpOpen then
+            if
+                not rendering
+                && projection.ListIsInteractive
+                && not (operationOwnsInput ())
+                && not helpOpen
+            then
                 args.NewValue
                 |> Option.ofNullable
                 |> Option.bind (fun index -> model.Packages |> List.tryItem index)
@@ -993,11 +1043,13 @@ type ExplorerWindow
         detailsButton.Accepting.Add(fun _ ->
             if not (operationOwnsInput ()) && not helpOpen then
                 selectedPackage ()
+                |> Option.filter (fun _ -> projection.ListIsInteractive)
                 |> Option.iter (fun package -> dispatch (ShowDetails package.Id)))
 
         readmeButton.Accepting.Add(fun _ ->
             if not (operationOwnsInput ()) && not helpOpen then
                 selectedPackage ()
+                |> Option.filter (fun _ -> projection.ListIsInteractive)
                 |> Option.iter (fun package -> dispatch (ShowReadme package.Id)))
 
         previewButtons
@@ -1030,8 +1082,14 @@ type ExplorerWindow
         bindFallbackKeys this
 
         this.ViewportChanged.Add(fun _ ->
+            let wasRendering = rendering
+            rendering <- true
             projection <- Presentation.project this.Viewport.Width model
-            setLayout this.Viewport.Width)
+            listFrame.Title <- projection.ListTitle
+            updateRows projection
+            updateListState projection
+            setLayout this.Viewport.Width
+            rendering <- wasRendering)
 
         render initial
 
