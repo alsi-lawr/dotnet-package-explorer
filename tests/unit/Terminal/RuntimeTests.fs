@@ -6,77 +6,11 @@ open Dotnet.PackageExplorer.Application
 open Dotnet.PackageExplorer.RpcClient
 open Dotnet.PackageExplorer.Terminal
 open FsUnit.Xunit
-open Terminal.Gui.App
+open TestData
 open Xunit
 
 [<Sealed>]
 type RuntimeTests() =
-    let success value = async { return Ok value }
-
-    let client close subscribe =
-        { Sources = fun _ -> success []
-          SourceMapping =
-            fun request ->
-                success
-                    { Kind = ApplyAllowed
-                      Package = Some request.Package
-                      Sources = [] }
-          Search =
-            fun request ->
-                success
-                    { Query = request.Query
-                      Packages = []
-                      HasNextPage = false }
-          RefreshInstalled =
-            fun _ ->
-                success
-                    { Items = []
-                      CapturedAt = DateTimeOffset.UnixEpoch }
-          FindUpdates = fun _ -> success { Updates = []; Continuation = None }
-          FindConsolidation = fun _ -> success { Packages = []; Continuation = None }
-          GetDetails =
-            fun request ->
-                success
-                    { Package =
-                        { Id = request.Package
-                          DisplayName = "Package"
-                          InstalledVersion = None
-                          LatestVersion = None
-                          Kind = None
-                          Source = None
-                          Relevance = None
-                          Description = None }
-                      Versions = []
-                      Dependencies = []
-                      IsDeprecated = false
-                      Vulnerabilities = []
-                      License = None }
-          GetReadme =
-            fun request ->
-                success
-                    { Package = request.Package
-                      CommonMark = "" }
-          Preview =
-            fun request ->
-                success
-                    { Id = PreviewId "preview"
-                      Operation = request.Operation
-                      Summary = []
-                      Projects = []
-                      Dependencies = []
-                      Files = [] }
-          Apply =
-            fun request ->
-                success
-                    { Preview = request.Preview
-                      Installed =
-                        { Items = []
-                          CapturedAt = DateTimeOffset.UnixEpoch }
-                      Summary = "" }
-          Cancel = fun _ -> success ()
-          Subscribe = subscribe
-          Close = close }
-
     [<Fact>]
     member _.``terminal lifetime closes the client subscription and UI cancellation exactly once``
         ()
@@ -136,38 +70,6 @@ type RuntimeTests() =
         (fun () -> cancellation.Token |> ignore)
         |> should throw typeof<ObjectDisposedException>
 
-    [<Fact>]
-    member _.``connected composition closes the client and subscription once after an ANSI run``() =
-        let mutable closeCount = 0
-        let mutable disposeCount = 0
-
-        let subscription =
-            { new IDisposable with
-                member _.Dispose() = disposeCount <- disposeCount + 1 }
-
-        let packageClient =
-            client (fun () -> async { closeCount <- closeCount + 1 }) (fun _ -> subscription)
-
-        let connection =
-            { Client = packageClient
-              Capabilities = Set.empty
-              ServerCapabilities = Set.empty }
-
-        let createApplication () =
-            let application = Application.Create()
-            application.StopAfterFirstIteration <- true
-            application
-
-        Runtime.runConnected
-            createApplication
-            "ansi"
-            Ansi16
-            (Runtime.target "App.fsproj")
-            connection
-        |> should equal 0
-
-        closeCount |> should equal 1
-        disposeCount |> should equal 1
 
     [<Fact>]
     member _.``connected composition closes the client when Terminal Gui initialization fails``() =

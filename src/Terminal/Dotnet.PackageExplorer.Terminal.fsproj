@@ -1,8 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <AssemblyName>Dotnet.PackageExplorer.Terminal</AssemblyName>
+        <AssemblyName>dotnet-package-explorer</AssemblyName>
         <RootNamespace>Dotnet.PackageExplorer.Terminal</RootNamespace>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>dotnet-package-explorer</ToolCommandName>
+        <PackageId>ALSI.PackageExplorer</PackageId>
+        <Version>0.1.0</Version>
+        <Title>dotnet-package-explorer</Title>
+        <Description>Explore and manage NuGet packages from a terminal.</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/alsi-lawr/dotnet-package-explorer</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/alsi-lawr/dotnet-package-explorer.git</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageTags>dotnet;nuget;packages;terminal;tui;tool</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
 
     <ItemGroup>
@@ -20,5 +34,10 @@
         <ProjectReference Include="../RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj" />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="Terminal.Gui" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="../../README.md" Pack="true" PackagePath="/" />
+        <None Include="../../LICENSE" Pack="true" PackagePath="/" />
     </ItemGroup>
 </Project>

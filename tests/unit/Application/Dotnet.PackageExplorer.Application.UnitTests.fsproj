@@ -15,7 +15,6 @@
         <Compile Include="ModeEntryTests.fs" />
         <Compile Include="ModeDiscoveryTests.fs" />
         <Compile Include="OperationsAndFailuresTests.fs" />
-        <Compile Include="ClientPortTests.fs" />
     </ItemGroup>
 
     <ItemGroup>

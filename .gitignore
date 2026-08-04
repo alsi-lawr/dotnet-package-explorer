@@ -2,6 +2,7 @@
 **/[Bb]in/
 **/[Oo]bj/
 .agent-workspace/
+artifacts/
 .direnv/
 .idea/
 .vs/

@@ -21,12 +21,6 @@ type FocusIdentity =
     | ProjectRow of ProjectId
     | PreviewPane
 
-type ScrollIdentity =
-    { PackageOffset: int
-      DetailsOffset: int
-      ProjectOffset: int
-      PreviewOffset: int }
-
 type PendingRequests =
     { Search: RequestToken option
       Refresh: RequestToken option
@@ -68,7 +62,6 @@ type Model =
       Readmes: Map<PackageId, PackageReadme>
       Route: Route
       Focus: FocusIdentity
-      Scroll: ScrollIdentity
       Pending: PendingRequests
       Failures: Map<FailureScope, ApplicationFailure>
       NextToken: int64 }
@@ -117,7 +110,6 @@ type Message =
     | BackendSessionFailed of ApplicationFailure
     | DismissFailure of FailureScope
     | SetFocus of FocusIdentity
-    | SetScroll of ScrollIdentity
 
 module Model =
     let allCapabilities =
@@ -130,12 +122,6 @@ module Model =
               ReadPackageReadme
               PreviewOperations
               ApplyOperations ]
-
-    let private blankScroll =
-        { PackageOffset = 0
-          DetailsOffset = 0
-          ProjectOffset = 0
-          PreviewOffset = 0 }
 
     let create
         (target: WorkspaceTarget)
@@ -171,7 +157,6 @@ module Model =
               Readmes = Map.empty
               Route = Content PackageList
               Focus = ModeTabs
-              Scroll = blankScroll
               Pending = PendingRequests.empty
               Failures = Map.empty
               NextToken = 1L }

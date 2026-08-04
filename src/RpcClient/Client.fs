@@ -3,7 +3,6 @@ namespace Dotnet.PackageExplorer.RpcClient
 open System
 open System.Collections.Concurrent
 open System.Threading
-open System.Threading.Tasks
 open Dotnet.PackageExplorer.Application
 
 type RpcConnection =
@@ -51,7 +50,7 @@ module RpcClient =
             scopeFailure
                 scope
                 BackendUnavailable
-                "Workspace Explorer is unavailable. Install or repair dotnet-we and try again."
+                "The dotnet host is unavailable. Install .NET 10 and try again."
         | TransportFailure.Exited code ->
             scopeFailure scope (BackendExited code) "Workspace Explorer exited unexpectedly."
         | TransportFailure.Cancelled ->

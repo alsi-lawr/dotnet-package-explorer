@@ -1,0 +1,45 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="256"
+  height="256"
+  viewBox="0 0 256 256"
+  role="img"
+  aria-labelledby="title description"
+>
+  <title id="title">dotnet-package-explorer</title>
+  <desc id="description">A package box with a magnifying glass and plus.</desc>
+  <defs>
+    <linearGradient id="search" x1="142" y1="136" x2="220" y2="218">
+      <stop stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect
+    x="18"
+    y="18"
+    width="220"
+    height="220"
+    rx="48"
+    fill="#17132b"
+    stroke="#4c3f73"
+    stroke-width="4"
+  />
+  <path d="M54 91l62-33 62 33-62 34z" fill="#a78bfa"/>
+  <path d="M54 91l62 34v70l-62-34z" fill="#302652"/>
+  <path d="M178 91l-62 34v70l62-34z" fill="#1f3152"/>
+  <path
+    d="M54 91l62-33 62 33v70l-62 34-62-34zM54 91l62 34 62-34M116 125v70"
+    fill="none"
+    stroke="#4c3f73"
+    stroke-width="6"
+    stroke-linejoin="round"
+  />
+  <circle cx="176" cy="169" r="31" fill="#17132b" stroke="url(#search)" stroke-width="10"/>
+  <path d="M198 191l20 20" stroke="#f5f3ff" stroke-width="12" stroke-linecap="round"/>
+  <path
+    d="M176 154v30M161 169h30"
+    stroke="#f5f3ff"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+</svg>

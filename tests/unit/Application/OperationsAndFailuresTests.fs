@@ -177,16 +177,10 @@ type OperationsAndFailuresTests() =
         actual.Mode |> should equal Installed
 
     [<Fact>]
-    member _.``backend exit keeps selection sorting focus paging scroll and the visible route``() =
+    member _.``backend exit keeps selection sorting focus paging and the visible route``() =
         let sort =
             { Field = Version
               Direction = Descending }
-
-        let scroll =
-            { PackageOffset = 5
-              DetailsOffset = 4
-              ProjectOffset = 3
-              PreviewOffset = 2 }
 
         let beforeFailure =
             model solution (Some(snapshot [ directPackage ]))
@@ -197,7 +191,6 @@ type OperationsAndFailuresTests() =
             |> updateModel (SetPackageSelection(directPackage.Id, true))
             |> updateModel (ShowTargeting directPackage.Id)
             |> updateModel (SetFocus DetailsPane)
-            |> updateModel (SetScroll scroll)
 
         let exited =
             failure BackendSessionFailure (BackendExited(Some 17)) "Workspace Explorer exited."
@@ -213,7 +206,6 @@ type OperationsAndFailuresTests() =
         actual.Sort |> should equal sort
         actual.Query |> should equal beforeFailure.Query
         actual.Focus |> should equal DetailsPane
-        actual.Scroll |> should equal scroll
 
     [<Fact>]
     member _.``recovery clears only the affected failure and preserves unrelated failures``() =

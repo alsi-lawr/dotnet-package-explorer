@@ -7,17 +7,26 @@
         <File Path="flake.lock" />
         <File Path="flake.nix" />
         <File Path="global.json" />
+        <File Path="LICENSE" />
+        <File Path="README.md" />
     </Folder>
     <Folder Name="/src/">
         <Project Path="src/Application/Dotnet.PackageExplorer.Application.fsproj" />
         <Project Path="src/RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj" />
         <Project Path="src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj" />
     </Folder>
-    <Folder Name="/tests/">
+    <Folder Name="/tests/integration/">
+        <Project
+        Path="tests/integration/RpcClient/Dotnet.PackageExplorer.RpcClient.IntegrationTests.fsproj"
+        />
+        <Project
+        Path="tests/integration/Terminal/Dotnet.PackageExplorer.Terminal.IntegrationTests.fsproj"
+        />
+    </Folder>
+    <Folder Name="/tests/unit/">
         <Project
             Path="tests/unit/Application/Dotnet.PackageExplorer.Application.UnitTests.fsproj"
         />
-        <Project Path="tests/unit/Foundation/Dotnet.PackageExplorer.Foundation.UnitTests.fsproj" />
         <Project
             Path="tests/unit/RpcClient/Dotnet.PackageExplorer.RpcClient.UnitTests.fsproj"
         />

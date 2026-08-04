@@ -4,12 +4,20 @@
         <IsTestProject>true</IsTestProject>
         <OutputType>Exe</OutputType>
         <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
-        <AssemblyName>Dotnet.PackageExplorer.RpcClient.UnitTests</AssemblyName>
-        <RootNamespace>Dotnet.PackageExplorer.RpcClient.UnitTests</RootNamespace>
+        <AssemblyName>Dotnet.PackageExplorer.RpcClient.IntegrationTests</AssemblyName>
+        <RootNamespace>Dotnet.PackageExplorer.RpcClient.IntegrationTests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="ProtocolTests.fs" />
+        <Compile Include="ProtocolContractTests.fs" />
+        <Compile Include="ProcessSessionTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="../../Fixtures/PackageRpc/**/*.mpack">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Link>Fixtures/PackageRpc/%(RecursiveDir)%(Filename)%(Extension)</Link>
+        </None>
     </ItemGroup>
 
     <ItemGroup>

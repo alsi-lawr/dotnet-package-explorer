@@ -23,11 +23,11 @@ type KeyboardTests() =
           Key.H.WithCtrl, MovePane -1
           Key.L.WithCtrl, MovePane 1
           Key.S, OpenSort
-          Key('/'), FocusSearch
+          Key '/', FocusSearch
           Key.Space, ToggleSelection
           Key.Enter, Activate
           Key.P, Preview
-          Key.R, TerminalAction.Refresh
+          Key.R, RefreshPackages
           Key.Esc, Back
           Key.Q, Quit ]
         |> List.iter (fun (key, expected) -> Keyboard.action key |> should equal (Some expected))

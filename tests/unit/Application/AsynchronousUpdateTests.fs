@@ -241,18 +241,11 @@ type AsynchronousUpdateTests() =
     member _.``a current refresh updates package data without changing interaction context``() =
         let initial = model solution (Some(snapshot [ directPackage ]))
 
-        let scroll =
-            { PackageOffset = 4
-              DetailsOffset = 2
-              ProjectOffset = 1
-              PreviewOffset = 3 }
-
         let refreshing, effects =
             initial
             |> updateModel (ChangeMode Updates)
             |> updateModel (SetPackageSelection(directPackage.Id, true))
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
             |> update Refresh
 
         let token = requestToken effects
@@ -262,7 +255,6 @@ type AsynchronousUpdateTests() =
         actual.Mode |> should equal Updates
         actual.SelectedPackages |> should equal (Set.singleton directPackage.Id)
         actual.Focus |> should equal (PackageRow directPackage.Id)
-        actual.Scroll |> should equal scroll
         actual.Installed |> should equal (Some refreshed)
 
     [<Fact>]

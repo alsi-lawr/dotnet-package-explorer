@@ -1,5 +1,5 @@
 {
-  description = ".NET 10 development shell for dotnet-package-explorer";
+  description = "Visual Studio-style NuGet package explorer for .NET terminals";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -28,8 +28,59 @@
           fantomas_7_0_5
           pkgs.fsautocomplete
         ];
+      packageExplorer = system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          inherit (pkgs) lib;
+        in
+        pkgs.buildDotnetModule {
+          pname = "dotnet-package-explorer";
+          version = "0.1.0";
+
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              ./Directory.Build.props
+              ./Directory.Packages.props
+              ./global.json
+              ./src/Application
+              ./src/RpcClient
+              ./src/Terminal
+            ];
+          };
+
+          projectFile = "src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj";
+          nugetDeps = ./nix/deps.json;
+          dotnet-sdk = pkgs.dotnet-sdk_10;
+          dotnet-runtime = pkgs.dotnet-runtime_10;
+          selfContainedBuild = true;
+          executables = [ "dotnet-package-explorer" ];
+
+          meta = {
+            description = "Visual Studio-style NuGet package explorer for .NET terminals";
+            homepage = "https://github.com/alsi-lawr/dotnet-package-explorer";
+            license = lib.licenses.mit;
+            mainProgram = "dotnet-package-explorer";
+          };
+        };
     in
     {
+      packages = forAllSystems (system:
+        let
+          package = packageExplorer system;
+        in
+        {
+          default = package;
+          dotnet-package-explorer = package;
+        });
+
+      apps = forAllSystems (system: {
+        default = {
+          type = "app";
+          program = "${packageExplorer system}/bin/dotnet-package-explorer";
+        };
+      });
+
       devShells = forAllSystems (
         system:
         let
@@ -46,23 +97,5 @@
         }
       );
 
-      checks = forAllSystems (
-        system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-        in
-        {
-          development-tools = pkgs.runCommand "dotnet-package-explorer-development-tools" {
-            nativeBuildInputs = developmentTools pkgs;
-          } ''
-            export DOTNET_CLI_HOME="$TMPDIR"
-            dotnet --version | grep -E '^10[.]'
-            git --version
-            fantomas --version | grep -F 'Fantomas v7.0.5'
-            fsautocomplete --version
-            touch "$out"
-          '';
-        }
-      );
     };
 }

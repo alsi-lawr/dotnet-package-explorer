@@ -4,6 +4,72 @@ open System
 open Dotnet.PackageExplorer.Application
 
 module TestData =
+    let success value = async { return Ok value }
+
+    let client close subscribe =
+        { Sources = fun _ -> success []
+          SourceMapping =
+            fun request ->
+                success
+                    { Kind = ApplyAllowed
+                      Package = Some request.Package
+                      Sources = [] }
+          Search =
+            fun request ->
+                success
+                    { Query = request.Query
+                      Packages = []
+                      HasNextPage = false }
+          RefreshInstalled =
+            fun _ ->
+                success
+                    { Items = []
+                      CapturedAt = DateTimeOffset.UnixEpoch }
+          FindUpdates = fun _ -> success { Updates = []; Continuation = None }
+          FindConsolidation = fun _ -> success { Packages = []; Continuation = None }
+          GetDetails =
+            fun request ->
+                success
+                    { Package =
+                        { Id = request.Package
+                          DisplayName = "Package"
+                          InstalledVersion = None
+                          LatestVersion = None
+                          Kind = None
+                          Source = None
+                          Relevance = None
+                          Description = None }
+                      Versions = []
+                      Dependencies = []
+                      IsDeprecated = false
+                      Vulnerabilities = []
+                      License = None }
+          GetReadme =
+            fun request ->
+                success
+                    { Package = request.Package
+                      CommonMark = "" }
+          Preview =
+            fun request ->
+                success
+                    { Id = PreviewId "preview"
+                      Operation = request.Operation
+                      Summary = []
+                      Projects = []
+                      Dependencies = []
+                      Files = [] }
+          Apply =
+            fun request ->
+                success
+                    { Preview = request.Preview
+                      Installed =
+                        { Items = []
+                          CapturedAt = DateTimeOffset.UnixEpoch }
+                      Summary = "" }
+          Cancel = fun _ -> success ()
+          Subscribe = subscribe
+          Close = close }
+
     let project name frameworks =
         { Id = ProjectId name
           Name = name
@@ -23,7 +89,7 @@ module TestData =
           Kind = kind
           Source = Some(PackageSource "nuget.org")
           Relevance = Some 1.0
-          Description = Some($"{id} package") }
+          Description = Some $"{id} package" }
 
     let direct = package "Direct.Package" (Some Direct) (Some "1.0.0") (Some "2.0.0")
     let central = package "Central.Package" (Some Central) (Some "1.0.0") (Some "2.0.0")

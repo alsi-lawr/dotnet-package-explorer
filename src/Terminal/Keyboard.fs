@@ -15,7 +15,7 @@ type TerminalAction =
     | ToggleSelection
     | Activate
     | Preview
-    | Refresh
+    | RefreshPackages
     | Back
     | Quit
 
@@ -37,11 +37,11 @@ module internal Keyboard =
         elif matches Key.H key then Some(MoveHorizontal -1)
         elif matches Key.L key then Some(MoveHorizontal 1)
         elif matches Key.S key then Some OpenSort
-        elif matches (Key('/')) key then Some FocusSearch
+        elif matches (Key '/') key then Some FocusSearch
         elif matches Key.Space key then Some ToggleSelection
         elif matches Key.Enter key then Some Activate
         elif matches Key.P key then Some Preview
-        elif matches Key.R key then Some Refresh
+        elif matches Key.R key then Some RefreshPackages
         elif matches Key.Esc key then Some Back
         elif matches Key.Q key then Some Quit
         else None

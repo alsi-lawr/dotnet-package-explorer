@@ -6,7 +6,6 @@ open System.Drawing
 open Dotnet.PackageExplorer.Application
 open Terminal.Gui.App
 open Terminal.Gui.Drawing
-open Terminal.Gui.Input
 open Terminal.Gui.ViewBase
 open Terminal.Gui.Views
 
@@ -122,7 +121,7 @@ type ExplorerWindow
             X = Pos.Absolute 0,
             Y = Pos.Bottom searchFrame,
             Width = Dim.Percent 45,
-            Height = Dim.Fill(3),
+            Height = Dim.Fill 3,
             BorderStyle = LineStyle.Rounded
         )
 
@@ -131,7 +130,7 @@ type ExplorerWindow
             X = Pos.Absolute 0,
             Y = Pos.Absolute 2,
             Width = Dim.Fill(),
-            Height = Dim.Fill(2),
+            Height = Dim.Fill 2,
             BorderStyle = LineStyle.None
         )
 
@@ -163,7 +162,7 @@ type ExplorerWindow
             X = Pos.Right listFrame,
             Y = Pos.Bottom searchFrame,
             Width = Dim.Fill(),
-            Height = Dim.Fill(3),
+            Height = Dim.Fill 3,
             BorderStyle = LineStyle.Rounded
         )
 
@@ -192,7 +191,7 @@ type ExplorerWindow
         new Label(
             X = Pos.Absolute 0,
             Y = Pos.AnchorEnd 1,
-            Width = Dim.Fill(24),
+            Width = Dim.Fill 24,
             Height = Dim.Absolute 1
         )
 
@@ -310,7 +309,7 @@ type ExplorerWindow
             searchLabel.Y <- Pos.Absolute 0
             search.X <- Pos.Absolute 8
             search.Y <- Pos.Absolute 0
-            search.Width <- Dim.Fill(2)
+            search.Width <- Dim.Fill 2
             sourceLabel.X <- Pos.Absolute 1
             sourceLabel.Y <- Pos.Absolute 1
             source.X <- Pos.Absolute 9
@@ -536,19 +535,22 @@ type ExplorerWindow
             match contentRoute () with
             | PackageDetails package when direction > 0 -> dispatch (ShowReadme package)
             | PackageReadme package when direction < 0 -> dispatch (ShowDetails package)
-            | OperationPreview(preview, tab) ->
+            | OperationPreview(_, tab) ->
                 dispatch (SelectPreviewTab(cycle previewTabs tab direction))
             | _ -> ()
 
     let requestPreview () =
+        let needsTargeting =
+            match contentRoute () with
+            | PackageTargeting _ -> false
+            | _ -> true
+
         match selectedPackage () with
         | None -> ()
         | Some package when
             WorkspaceTarget.supportsProjectSelection model.Target
             && Set.isEmpty model.TargetSelection.Projects
-            && (match contentRoute () with
-                | PackageTargeting _ -> false
-                | _ -> true)
+            && needsTargeting
             ->
             dispatch (ShowTargeting package.Id)
         | Some package ->
@@ -602,7 +604,7 @@ type ExplorerWindow
         | NextMode -> dispatch (ChangeMode(cycle modeOrder model.Mode 1))
         | PreviousMode -> dispatch (ChangeMode(cycle modeOrder model.Mode -1))
         | SelectMode mode -> dispatch (ChangeMode mode)
-        | MoveRow direction when sortOpen ->
+        | MoveRow _ when sortOpen ->
             pendingSort <-
                 { pendingSort with
                     Direction =
@@ -687,7 +689,7 @@ type ExplorerWindow
                     narrowContext <- true
                     dispatch (ShowDetails package.Id))
         | Preview -> requestPreview ()
-        | TerminalAction.Refresh -> dispatch Message.Refresh
+        | RefreshPackages -> dispatch Refresh
         | Back -> dismissOrCancel ()
         | Quit -> stop ()
 
@@ -710,7 +712,9 @@ type ExplorerWindow
         let usesNativeActivation =
             function
             | Activate
-            | ToggleSelection -> prerelease.HasFocus || (buttons |> List.exists _.HasFocus)
+            | ToggleSelection ->
+                prerelease.HasFocus
+                || List.exists (fun (button: Button) -> button.HasFocus) buttons
             | _ -> false
 
         match Keyboard.action key with
@@ -847,20 +851,5 @@ type ExplorerWindow
 
         render initial
 
-    member _.Render(nextModel) = render nextModel
-    member _.Projection = projection
-    member _.PackageList = packageList
-    member _.Context = context
-    member _.Search = search
-    member _.Source = source
-    member _.Prerelease = prerelease
-    member _.ModeButtons = modeButtons
-    member _.DetailsButton = detailsButton
-    member _.ReadmeButton = readmeButton
-    member _.PreviewButtons = previewButtons
-    member _.ListFrame = listFrame
-    member _.ContextFrame = contextFrame
-    member _.SortFrame = sortFrame
-    member _.ConfirmationFrame = confirmationFrame
-    member _.BindKeyboard(keyboard) = bindKeyboard keyboard
-    member _.Handle(action) = handle action
+    member _.Render nextModel = render nextModel
+    member _.BindKeyboard keyboard = bindKeyboard keyboard

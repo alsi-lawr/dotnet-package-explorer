@@ -27,12 +27,6 @@ type ModeDiscoveryTests() =
                 CandidateVersions = [ PackageVersion "3.0.0"; PackageVersion "2.0.0" ] } ]
           Continuation = continuation }
 
-    let scroll =
-        { PackageOffset = 5
-          DetailsOffset = 4
-          ProjectOffset = 3
-          PreviewOffset = 2 }
-
     let withPackageFailure package state =
         let loading, effects = update (ShowDetails package) state
         let token = requestToken effects
@@ -78,7 +72,6 @@ type ModeDiscoveryTests() =
                       Direction = Descending }
             )
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
 
         let loadingDetails, detailsEffects =
             update (ShowDetails directPackage.Id) contextual
@@ -114,7 +107,6 @@ type ModeDiscoveryTests() =
         actual.SelectedPackages |> should equal withFailure.SelectedPackages
         actual.Sort |> should equal withFailure.Sort
         actual.Focus |> should equal withFailure.Focus
-        actual.Scroll |> should equal scroll
         actual.Failures |> should equal withFailure.Failures
         actual.Route |> should equal withFailure.Route
 
@@ -166,7 +158,6 @@ type ModeDiscoveryTests() =
                       Direction = Descending }
             )
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
             |> withPackageFailure directPackage.Id
 
         let staleUpdates =
@@ -186,7 +177,6 @@ type ModeDiscoveryTests() =
         acceptedUpdates.SelectedPackages |> should equal currentUpdates.SelectedPackages
         acceptedUpdates.Sort |> should equal currentUpdates.Sort
         acceptedUpdates.Focus |> should equal currentUpdates.Focus
-        acceptedUpdates.Scroll |> should equal currentUpdates.Scroll
         acceptedUpdates.Failures |> should equal currentUpdates.Failures
         acceptedUpdates.Route |> should equal currentUpdates.Route
 
@@ -205,7 +195,6 @@ type ModeDiscoveryTests() =
             |> updateModel (SetPackageSelection(centralPackage.Id, true))
             |> updateModel (ChangeSort { Field = Type; Direction = Ascending })
             |> updateModel (SetFocus(PackageRow centralPackage.Id))
-            |> updateModel (SetScroll scroll)
             |> withPackageFailure centralPackage.Id
 
         let staleConsolidation =
@@ -232,7 +221,6 @@ type ModeDiscoveryTests() =
         |> should equal currentConsolidation.SelectedPackages
 
         acceptedConsolidation.Focus |> should equal currentConsolidation.Focus
-        acceptedConsolidation.Scroll |> should equal currentConsolidation.Scroll
         acceptedConsolidation.Sort |> should equal currentConsolidation.Sort
         acceptedConsolidation.Failures |> should equal currentConsolidation.Failures
         acceptedConsolidation.Route |> should equal currentConsolidation.Route
@@ -253,7 +241,6 @@ type ModeDiscoveryTests() =
             )
             |> updateModel (SetPackageSelection(directPackage.Id, true))
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
 
         let failingUpdates, failingUpdateEffects = update SubmitSearch loadedUpdates
         let failingUpdateToken = requestToken failingUpdateEffects
@@ -266,7 +253,6 @@ type ModeDiscoveryTests() =
         failedUpdates.AvailableUpdates |> should equal loadedUpdates.AvailableUpdates
         failedUpdates.SelectedPackages |> should equal loadedUpdates.SelectedPackages
         failedUpdates.Focus |> should equal loadedUpdates.Focus
-        failedUpdates.Scroll |> should equal loadedUpdates.Scroll
 
         let cancellingUpdates, _ = update SubmitSearch loadedUpdates
 
@@ -278,7 +264,6 @@ type ModeDiscoveryTests() =
         cancelledUpdates.SelectedPackages |> should equal loadedUpdates.SelectedPackages
         cancelledUpdates.Sort |> should equal loadedUpdates.Sort
         cancelledUpdates.Focus |> should equal loadedUpdates.Focus
-        cancelledUpdates.Scroll |> should equal loadedUpdates.Scroll
 
         match updateCancelEffects with
         | [ CancelRequest _ ] -> ()
@@ -299,7 +284,6 @@ type ModeDiscoveryTests() =
             )
             |> updateModel (SetPackageSelection(centralPackage.Id, true))
             |> updateModel (SetFocus(PackageRow centralPackage.Id))
-            |> updateModel (SetScroll scroll)
 
         let failingConsolidation, failingConsolidationEffects =
             update SubmitSearch loadedConsolidation
@@ -319,7 +303,6 @@ type ModeDiscoveryTests() =
         |> should equal loadedConsolidation.SelectedPackages
 
         failedConsolidation.Focus |> should equal loadedConsolidation.Focus
-        failedConsolidation.Scroll |> should equal loadedConsolidation.Scroll
 
         let cancellingConsolidation, _ = update SubmitSearch loadedConsolidation
 
@@ -336,7 +319,6 @@ type ModeDiscoveryTests() =
 
         cancelledConsolidation.Sort |> should equal loadedConsolidation.Sort
         cancelledConsolidation.Focus |> should equal loadedConsolidation.Focus
-        cancelledConsolidation.Scroll |> should equal loadedConsolidation.Scroll
 
         match consolidationCancelEffects with
         | [ CancelRequest _ ] -> ()

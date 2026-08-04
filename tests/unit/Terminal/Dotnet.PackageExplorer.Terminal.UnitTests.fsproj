@@ -12,7 +12,6 @@
         <Compile Include="TestData.fs" />
         <Compile Include="PresentationTests.fs" />
         <Compile Include="KeyboardTests.fs" />
-        <Compile Include="RendererTests.fs" />
         <Compile Include="RuntimeTests.fs" />
     </ItemGroup>
 

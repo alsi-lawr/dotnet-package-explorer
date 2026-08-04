@@ -7,12 +7,6 @@ open Xunit
 
 [<Sealed>]
 type ModeEntryTests() =
-    let scroll =
-        { PackageOffset = 5
-          DetailsOffset = 4
-          ProjectOffset = 3
-          PreviewOffset = 2 }
-
     [<Fact>]
     member _.``entering Browse starts a current search and ignores a replaced mode request``() =
         let source = PackageSource "private-feed"
@@ -23,7 +17,6 @@ type ModeEntryTests() =
             |> updateModel (ChangePage 2)
             |> updateModel (SelectSource(Some source))
             |> updateModel (SetFocus PackageSearch)
-            |> updateModel (SetScroll scroll)
 
         let first, firstEffects = update (ChangeMode Browse) prepared
         let firstToken = requestToken firstEffects
@@ -68,7 +61,6 @@ type ModeEntryTests() =
         actual.Packages |> should equal [ browsePackage ]
         actual.Pending.Search |> should equal None
         actual.Focus |> should equal current.Focus
-        actual.Scroll |> should equal current.Scroll
         actual.Installed |> should equal current.Installed
 
     [<Fact>]
@@ -97,7 +89,6 @@ type ModeEntryTests() =
             current
             |> updateModel (SetPackageSelection(directPackage.Id, true))
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
 
         let stale =
             contextual
@@ -114,7 +105,6 @@ type ModeEntryTests() =
         actual.Pending.Refresh |> should equal None
         actual.SelectedPackages |> should equal contextual.SelectedPackages
         actual.Focus |> should equal contextual.Focus
-        actual.Scroll |> should equal contextual.Scroll
 
     [<Fact>]
     member _.``mode-entry failure and cancellation retain immediate Installed rows``() =
@@ -127,7 +117,6 @@ type ModeEntryTests() =
             waiting
             |> updateModel (SetPackageSelection(directPackage.Id, true))
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
 
         let failed =
             failing
@@ -142,7 +131,6 @@ type ModeEntryTests() =
         failed.Packages |> should equal [ directPackage ]
         failed.SelectedPackages |> should equal failing.SelectedPackages
         failed.Focus |> should equal failing.Focus
-        failed.Scroll |> should equal failing.Scroll
 
         let cancellationWaiting, _ = update (ChangeMode Installed) failed
 
@@ -150,7 +138,6 @@ type ModeEntryTests() =
             cancellationWaiting
             |> updateModel (SetPackageSelection(directPackage.Id, true))
             |> updateModel (SetFocus(PackageRow directPackage.Id))
-            |> updateModel (SetScroll scroll)
 
         let cancelled, cancellationEffects = update (Cancel RefreshRequest) cancelling
 
@@ -158,7 +145,6 @@ type ModeEntryTests() =
         cancelled.Packages |> should equal [ directPackage ]
         cancelled.SelectedPackages |> should equal cancelling.SelectedPackages
         cancelled.Focus |> should equal cancelling.Focus
-        cancelled.Scroll |> should equal cancelling.Scroll
         cancelled.Failures[BackendSessionFailure].Kind |> should equal Cancelled
 
         match cancellationEffects with

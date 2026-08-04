@@ -729,4 +729,3 @@ module Update =
             []
 
         | SetFocus focus -> { model with Focus = focus }, []
-        | SetScroll scroll -> { model with Scroll = scroll }, []

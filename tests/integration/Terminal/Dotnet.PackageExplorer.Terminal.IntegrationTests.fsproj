@@ -4,17 +4,19 @@
         <IsTestProject>true</IsTestProject>
         <OutputType>Exe</OutputType>
         <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
-        <AssemblyName>Dotnet.PackageExplorer.RpcClient.UnitTests</AssemblyName>
-        <RootNamespace>Dotnet.PackageExplorer.RpcClient.UnitTests</RootNamespace>
+        <AssemblyName>Dotnet.PackageExplorer.Terminal.IntegrationTests</AssemblyName>
+        <RootNamespace>Dotnet.PackageExplorer.Terminal.IntegrationTests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="ProtocolTests.fs" />
+        <Compile Include="../../unit/Terminal/TestData.fs" Link="TestData.fs" />
+        <Compile Include="AnsiDriverTests.fs" />
+        <Compile Include="InteractionTests.fs" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference
-            Include="../../../src/RpcClient/Dotnet.PackageExplorer.RpcClient.fsproj"
+            Include="../../../src/Terminal/Dotnet.PackageExplorer.Terminal.fsproj"
         />
         <PackageReference Include="FSharp.Core" />
         <PackageReference Include="FsUnit.Xunit" />
