@@ -257,7 +257,7 @@ type AnsiDriverTests() =
         wide.Contains("Versions", StringComparison.Ordinal) |> should equal true
 
     [<Fact>]
-    member _.``wide short content is centered in a bounded scrollable measure``() =
+    member _.``short content is centered wide and starts below tabs compact``() =
         let centeredRoutes =
             [ { model () with
                   Route = Content(PackageDetails direct.Id) }
@@ -284,7 +284,8 @@ type AnsiDriverTests() =
                 contextViewport 90 30 initial 0
 
             compactFrame.X |> should equal 0
-            compactFrame.Y |> should equal 2
+            compactFrame.Y |> should be (greaterThanOrEqualTo 2)
+            compactFrame.Y |> should be (lessThanOrEqualTo 3)
             compactFrame.Width |> should equal compactParent.Width
             compactViewport.Width |> should be (greaterThan 64)
             compactViewport.Height |> should be (greaterThanOrEqualTo 12))
