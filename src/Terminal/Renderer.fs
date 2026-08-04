@@ -1293,6 +1293,7 @@ type ExplorerWindow
             | None -> ())
 
     do
+        Glyphs.Stipple <- Text.Rune ' '
         this.Title <- "WORKSPACE EXPLORER / PACKAGES"
         this.BorderStyle <- LineStyle.Rounded
         this.Width <- Dim.Fill()

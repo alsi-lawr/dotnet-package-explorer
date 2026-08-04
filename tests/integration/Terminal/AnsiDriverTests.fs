@@ -8,6 +8,7 @@ open Dotnet.PackageExplorer.Terminal.UnitTests.TestData
 open FsUnit.Xunit
 open Terminal.Gui.App
 open Terminal.Gui.Drivers
+open Terminal.Gui.Drawing
 open Terminal.Gui.Input
 open Xunit
 
@@ -205,6 +206,27 @@ type AnsiDriverTests() =
         application.Run window |> ignore
         frame, viewport, parentViewport, scrolled
 
+    let contextScrollbar width height initial =
+        use application = Application.Create().Init "ansi"
+
+        application.Driver
+        |> Option.ofObj
+        |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
+
+        application.StopAfterFirstIteration <- true
+        use window = new ExplorerWindow(initial, ignore, application.RequestStop, Ansi16)
+        use _keyboard = window.BindKeyboard application.Keyboard
+
+        application.Keyboard.RaiseKeyDownEvent Key.L.WithCtrl |> ignore
+        application.Run window |> ignore
+
+        let active =
+            window.MostFocused
+            |> Option.ofObj
+            |> Option.defaultWith (fun () -> failwith "Context did not receive focus.")
+
+        active.FrameToScreen(), active.Viewport, Driver.cells application.Driver
+
     [<Fact>]
     member _.``Terminal Gui v2 instance host renders one bounded ANSI driver iteration``() =
         use application = Application.Create().Init "ansi"
@@ -297,6 +319,86 @@ type AnsiDriverTests() =
             compactFrame.X |> should equal 0
             compactFrame.Width |> should equal compactParent.Width
             compactViewport.Width |> should be (greaterThan 64))
+
+    [<Fact>]
+    member _.``overflow uses blank tracks with visible controls and short content has no scrollbar``
+        ()
+        =
+        let longReadme =
+            [ 1..40 ]
+            |> List.map (fun line -> $"## Section {line}\n\nContent for section {line}.")
+            |> String.concat "\n\n"
+
+        let readme =
+            { model () with
+                Route = Content(PackageReadme direct.Id)
+                Readmes =
+                    Map.ofList
+                        [ direct.Id,
+                          { Package = direct.Id
+                            CommonMark = longReadme } ] }
+
+        let projects =
+            [ 1..12 ]
+            |> List.map (fun index ->
+                project ("Project" + string index) [ "net10.0"; "net9.0"; "net8.0" ])
+
+        let targets =
+            { model () with
+                Target = Solution("Example.slnx", projects)
+                Route = Content(PackageTargeting direct.Id)
+                Focus = ProjectRow projects.Head.Id }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            [ readme; targets ]
+            |> List.iter (fun initial ->
+                let frame, viewport, cells = contextScrollbar width height initial
+                let scrollbarColumn = frame.Right - 1
+                let topRow = frame.Top
+                let bottomRow = frame.Bottom - 1
+                let up, upForeground, upBackground = cells[topRow][scrollbarColumn]
+                let down, downForeground, downBackground = cells[bottomRow][scrollbarColumn]
+
+                up |> should not' (equal " ")
+                down |> should not' (equal " ")
+                upForeground |> should not' (equal upBackground)
+                downForeground |> should not' (equal downBackground)
+
+                let track =
+                    cells[topRow + 1 .. bottomRow - 1]
+                    |> Array.map (fun row -> row[scrollbarColumn])
+
+                track |> Array.exists (fun (glyph, _, _) -> glyph = " ") |> should equal true
+
+                track
+                |> Array.exists (fun (glyph, foreground, background) ->
+                    glyph <> " " && foreground <> background)
+                |> should equal true
+
+                viewport.Width |> should equal (frame.Width - 1)
+
+                let _, _, _, scrolled = contextViewport width height initial 4
+                scrolled |> should equal true)
+
+            let shortPreview =
+                { preview with
+                    Summary = [ "Update Direct.Package." ] }
+
+            let shortContent =
+                { model () with
+                    Route = Content(OperationPreview(shortPreview, Summary)) }
+
+            let frame, viewport, cells = contextScrollbar width height shortContent
+
+            let visibleGlyphs =
+                cells[frame.Top .. frame.Bottom - 1]
+                |> Array.collect (fun row -> row[frame.Left .. frame.Right - 1])
+                |> Array.map (fun (glyph, _, _) -> glyph)
+
+            visibleGlyphs |> should not' (contain (Glyphs.UpArrow.ToString()))
+            visibleGlyphs |> should not' (contain (Glyphs.DownArrow.ToString()))
+            viewport.Width |> should equal frame.Width)
 
     [<Fact>]
     member _.``preview projects balance comparison columns without clipping identity``() =
