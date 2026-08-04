@@ -88,6 +88,43 @@ type AnsiDriverTests() =
 
     let render width initial = renderTextWithKeys width 35 initial []
 
+    let contextViewport width height initial scrollRows =
+        use application = Application.Create().Init "ansi"
+
+        application.Driver
+        |> Option.ofObj
+        |> Option.iter (fun driver -> driver.SetScreenSize(width, height))
+
+        use window = new ExplorerWindow(initial, ignore, application.RequestStop, Ansi16)
+
+        use _keyboard = window.BindKeyboard application.Keyboard
+        let mutable frame = Drawing.Rectangle.Empty
+        let mutable viewport = Drawing.Rectangle.Empty
+        let mutable scrolled = false
+
+        application.Invoke(
+            Action(fun () ->
+                application.Keyboard.RaiseKeyDownEvent Key.L.WithCtrl |> ignore
+
+                let active =
+                    window.MostFocused
+                    |> Option.ofObj
+                    |> Option.defaultWith (fun () -> failwith "Context did not receive focus.")
+
+                frame <- active.Frame
+                viewport <- active.Viewport
+
+                if scrollRows > 0 then
+                    scrolled <-
+                        active.ScrollVertical(scrollRows).GetValueOrDefault()
+                        && active.Viewport.Y > 0
+
+                application.RequestStop())
+        )
+
+        application.Run window |> ignore
+        frame, viewport, scrolled
+
     [<Fact>]
     member _.``Terminal Gui v2 instance host renders one bounded ANSI driver iteration``() =
         use application = Application.Create().Init "ansi"
@@ -116,6 +153,93 @@ type AnsiDriverTests() =
         let wide = render 160 details
         wide.Contains("Central.Package", StringComparison.Ordinal) |> should equal true
         wide.Contains("Versions", StringComparison.Ordinal) |> should equal true
+
+    [<Fact>]
+    member _.``wide short content is centered in a bounded scrollable measure``() =
+        let centeredRoutes =
+            [ { model () with
+                  Route = Content(PackageDetails direct.Id) }
+              { model () with
+                  Route = Content(OperationPreview(preview, Summary)) }
+              { model () with
+                  Route = Content(OperationPreview(preview, Dependencies)) } ]
+
+        centeredRoutes
+        |> List.iter (fun initial ->
+            let wideFrame, wideViewport, _ = contextViewport 126 34 initial 0
+            wideFrame.X |> should be (greaterThan 0)
+            wideFrame.Y |> should be (greaterThan 2)
+            wideFrame.Width |> should equal 64
+            wideFrame.Height |> should equal 12
+            wideViewport.Width |> should be (lessThanOrEqualTo 64)
+            wideViewport.Height |> should be (lessThanOrEqualTo 12)
+
+            let compactFrame, compactViewport, _ = contextViewport 90 30 initial 0
+            compactFrame.X |> should equal 0
+            compactFrame.Y |> should equal 2
+            compactViewport.Width |> should be (greaterThan 64)
+            compactViewport.Height |> should be (greaterThanOrEqualTo 12))
+
+        let details =
+            { model () with
+                Route = Content(PackageDetails direct.Id) }
+
+        let _, _, wideScrolled = contextViewport 126 34 details 4
+        let _, _, compactScrolled = contextViewport 90 30 details 4
+        wideScrolled |> should equal true
+        compactScrolled |> should equal true
+
+    [<Fact>]
+    member _.``README targets and preview files retain their full content pane``() =
+        [ { model () with
+              Route = Content(PackageReadme direct.Id) }
+          { model () with
+              Route = Content(PackageTargeting direct.Id) }
+          { model () with
+              Route = Content(OperationPreview(preview, Files)) } ]
+        |> List.iter (fun initial ->
+            let wideFrame, wideViewport, _ = contextViewport 126 34 initial 0
+            wideFrame.X |> should equal 0
+            wideViewport.Width |> should be (greaterThan 64)
+
+            let compactFrame, compactViewport, _ = contextViewport 90 30 initial 0
+            compactFrame.X |> should equal 0
+            compactViewport.Width |> should be (greaterThan 64))
+
+    [<Fact>]
+    member _.``preview projects balance comparison columns without clipping identity``() =
+        let projects =
+            { model () with
+                Route = Content(OperationPreview(preview, Projects)) }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            let rows = renderWithKeys width height projects [ Key.L.WithCtrl ]
+
+            let header =
+                rows
+                |> List.find (fun row ->
+                    [ "Project"; "Framework"; "Current"; "Proposed" ]
+                    |> List.forall (fun heading ->
+                        row.Contains(heading, StringComparison.Ordinal)))
+
+            let projectStart = header.IndexOf("Project", StringComparison.Ordinal)
+            let frameworkStart = header.IndexOf("Framework", StringComparison.Ordinal)
+            let currentStart = header.IndexOf("Current", StringComparison.Ordinal)
+            let proposedStart = header.IndexOf("Proposed", StringComparison.Ordinal)
+            let contextRight = width - 2
+            let projectWidth = frameworkStart - projectStart - 1
+            let currentWidth = proposedStart - currentStart - 1
+            let proposedWidth = contextRight - proposedStart
+
+            currentWidth |> should equal proposedWidth
+            proposedWidth |> should be (lessThanOrEqualTo projectWidth)
+
+            let screen = String.concat Environment.NewLine rows
+
+            [ "Web"; "net10.0"; "1.0.0"; "2.0.0" ]
+            |> List.iter (fun value ->
+                screen.Contains(value, StringComparison.Ordinal) |> should equal true))
 
     [<Fact>]
     member _.``compact routes reserve one guidance row and one combined status route row``() =

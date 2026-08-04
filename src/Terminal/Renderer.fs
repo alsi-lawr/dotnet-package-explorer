@@ -2,6 +2,7 @@ namespace Dotnet.PackageExplorer.Terminal
 
 open System
 open System.Collections.ObjectModel
+open System.Data
 open System.Drawing
 open Dotnet.PackageExplorer.Application
 open Terminal.Gui.App
@@ -160,6 +161,25 @@ type ExplorerWindow
             BorderStyle = LineStyle.None,
             ShowHeadingPrefix = false,
             ShowCopyButtons = false
+        )
+
+    let projectTableData =
+        let table = new DataTable()
+        table.Columns.Add "Project" |> ignore
+        table.Columns.Add "Framework" |> ignore
+        table.Columns.Add "Current" |> ignore
+        table.Columns.Add "Proposed" |> ignore
+        table
+
+    let projectTable =
+        new TableView(
+            new DataTableSource(projectTableData),
+            X = Pos.Absolute 0,
+            Y = Pos.Absolute 2,
+            Width = Dim.Fill(),
+            Height = Dim.Fill 2,
+            BorderStyle = LineStyle.None,
+            Visible = false
         )
 
     let contextButton x width title =
@@ -327,7 +347,7 @@ type ExplorerWindow
     let readmeCodeWidth columns =
         match Presentation.width columns with
         | Narrow -> max 20 (columns - 8)
-        | Wide -> max 20 (columns - (columns * Presentation.WideListPercentage / 100) - 8)
+        | Wide -> max 20 (columns - (columns * Presentation.listPercentage model / 100) - 8)
 
     let wrapCodeLine width (line: string) =
         let rec wrap (remaining: string) =
@@ -404,6 +424,86 @@ type ExplorerWindow
 
             if oldViewport.Height > 0 then
                 context.Viewport <- oldViewport
+
+    let activeContextView () : View =
+        if projectTable.Visible then projectTable else context
+
+    let projectRows () =
+        match model.Route with
+        | Content(OperationPreview(preview, Projects)) -> preview.Projects
+        | _ -> []
+
+    let updateProjectTable () =
+        projectTableData.Rows.Clear()
+
+        projectRows ()
+        |> List.iter (fun project ->
+            let (ProjectId name) = project.Project
+
+            let framework =
+                project.Framework
+                |> Option.map (fun (TargetFramework value) -> value)
+                |> Option.defaultValue "(all)"
+
+            projectTableData.Rows.Add(
+                name,
+                framework,
+                Presentation.packageVersion project.Before,
+                Presentation.packageVersion project.After
+            )
+            |> ignore)
+
+        projectTable.Update()
+
+    let projectColumnWidths availableWidth =
+        let textWidth (heading: string) (values: string list) =
+            values |> List.map String.length |> List.fold max heading.Length
+
+        let rows = projectRows ()
+
+        let projectWidth =
+            rows
+            |> List.map (fun project ->
+                let (ProjectId value) = project.Project
+                value)
+            |> textWidth "Project"
+
+        let frameworkWidth =
+            rows
+            |> List.map (fun project ->
+                project.Framework
+                |> Option.map (fun (TargetFramework value) -> value)
+                |> Option.defaultValue "(all)")
+            |> textWidth "Framework"
+
+        let versionWidth =
+            [ rows |> List.map (_.Before >> Presentation.packageVersion)
+              rows |> List.map (_.After >> Presentation.packageVersion) ]
+            |> List.concat
+            |> textWidth "Proposed"
+
+        let baseProject = max projectWidth versionWidth
+        let usableWidth = max 1 (availableWidth - 3)
+        let required = baseProject + frameworkWidth + versionWidth * 2
+        let extra = max 0 (usableWidth - required)
+        let projectExtra = extra / 3
+        let frameworkExtra = extra - projectExtra
+
+        baseProject + projectExtra, frameworkWidth + frameworkExtra, versionWidth
+
+    let updateProjectColumns availableWidth =
+        if availableWidth > 0 then
+            let projectWidth, frameworkWidth, versionWidth = projectColumnWidths availableWidth
+
+            [ 0, projectWidth; 1, frameworkWidth; 2, versionWidth; 3, versionWidth ]
+            |> List.iter (fun (column, width) ->
+                let style = projectTable.Style.GetOrCreateColumnStyle column
+                style.MinWidth <- width
+                style.MaxWidth <- width)
+
+            projectTable.MaxCellWidth <- max projectWidth (max frameworkWidth versionWidth)
+
+            projectTable.Update()
 
     let currentActions () =
         if sortOpen then
@@ -577,7 +677,8 @@ type ExplorerWindow
             prerelease.Y <- Pos.Absolute 0
 
             listFrame.X <- Pos.Absolute 0
-            listFrame.Width <- Dim.Percent Presentation.WideListPercentage
+            let listPercentage = Presentation.listPercentage model
+            listFrame.Width <- Dim.Percent listPercentage
             contextFrame.X <- Pos.Right listFrame
             contextFrame.Y <- Pos.Bottom searchFrame
             contextFrame.Width <- Dim.Fill()
@@ -587,6 +688,54 @@ type ExplorerWindow
 
         let overlayWidth = min 76 (max 40 (width - 4))
         helpFrame.Width <- Dim.Absolute overlayWidth
+
+        let tabsOffset =
+            match contentRoute () with
+            | PackageDetails _
+            | PackageReadme _
+            | OperationPreview _ -> 2
+            | _ -> 0
+
+        let availableWidth =
+            if contextFrame.Viewport.Width > 0 then
+                contextFrame.Viewport.Width
+            elif narrow || operation then
+                max 1 (width - 2)
+            else
+                max 1 (width - width * Presentation.listPercentage model / 100 - 2)
+
+        let availableHeight =
+            if contextFrame.Viewport.Height > tabsOffset then
+                contextFrame.Viewport.Height - tabsOffset
+            else
+                max 1 (this.Viewport.Height - 12 - tabsOffset)
+
+        let centered =
+            not narrow
+            && match model.Route with
+               | Content(PackageDetails _)
+               | Content(OperationPreview(_, Summary))
+               | Content(OperationPreview(_, Dependencies)) -> true
+               | _ -> false
+
+        if centered then
+            let bodyWidth = min 64 availableWidth
+            let bodyHeight = min 12 availableHeight
+            context.X <- Pos.Absolute(max 0 ((availableWidth - bodyWidth) / 2))
+            context.Y <- Pos.Absolute(tabsOffset + max 0 ((availableHeight - bodyHeight) / 2))
+            context.Width <- Dim.Absolute bodyWidth
+            context.Height <- Dim.Absolute bodyHeight
+        else
+            context.X <- Pos.Absolute 0
+            context.Y <- Pos.Absolute tabsOffset
+            context.Width <- Dim.Fill()
+            context.Height <- Dim.Fill tabsOffset
+
+        projectTable.X <- Pos.Absolute 0
+        projectTable.Y <- Pos.Absolute tabsOffset
+        projectTable.Width <- Dim.Fill()
+        projectTable.Height <- Dim.Fill tabsOffset
+        updateProjectColumns availableWidth
 
     let render nextModel =
         let previousContent = contentRoute ()
@@ -719,15 +868,20 @@ type ExplorerWindow
                      schemes.Section)
                 button)
 
-        let tabsVisible = packageTabs || activePreviewTab.IsSome
-        context.Y <- Pos.Absolute(if tabsVisible then 2 else 0)
-        context.Height <- Dim.Fill(if tabsVisible then 2 else 0)
+        let projectsVisible =
+            match model.Route with
+            | Content(OperationPreview(_, Projects)) -> true
+            | _ -> false
+
+        context.Visible <- not projectsVisible
+        projectTable.Visible <- projectsVisible
 
         listFrame.Title <- projection.ListTitle
         contextFrame.Title <- projection.ContextTitle
         updateRows projection
         updateListState projection
         updateContextText this.Viewport.Width
+        updateProjectTable ()
 
         status.Text <- projection.Status
         route.Text <- projection.Route
@@ -887,7 +1041,7 @@ type ExplorerWindow
         match helpReturnFocus with
         | Some view -> view.SetFocus() |> ignore
         | None when confirmationOpen -> confirmationFrame.SetFocus() |> ignore
-        | None when Presentation.ownsInput model -> context.SetFocus() |> ignore
+        | None when Presentation.ownsInput model -> activeContextView().SetFocus() |> ignore
         | None -> ()
 
         helpReturnFocus <- None
@@ -985,11 +1139,11 @@ type ExplorerWindow
                 setLayout this.Viewport.Width
 
                 if narrowContext then
-                    context.SetFocus() |> ignore
+                    activeContextView().SetFocus() |> ignore
                 else
                     packageList.SetFocus() |> ignore
             elif direction > 0 then
-                context.SetFocus() |> ignore
+                activeContextView().SetFocus() |> ignore
             else
                 packageList.SetFocus() |> ignore
         | OpenSort when not projection.ListIsInteractive -> ()
@@ -1126,6 +1280,7 @@ type ExplorerWindow
         contextFrame.Add readmeButton |> ignore
         previewButtons |> List.iter (snd >> contextFrame.Add >> ignore)
         contextFrame.Add context |> ignore
+        contextFrame.Add projectTable |> ignore
         sortFrame.Add sortContents |> ignore
         confirmationFrame.Add confirmationContents |> ignore
         confirmationFrame.Add confirmationActions |> ignore
@@ -1153,6 +1308,7 @@ type ExplorerWindow
         Theme.apply schemes.Information listHeading
         Theme.apply schemes.Warning listNotice
         Theme.apply contentScheme context
+        Theme.apply contentScheme projectTable
         Theme.apply schemes.Information searchLabel
         Theme.apply schemes.Information sourceLabel
         Theme.apply schemes.Section search
@@ -1179,6 +1335,18 @@ type ExplorerWindow
 
         Theme.apply schemes.Muted packageList.VerticalScrollBar
         Theme.apply schemes.Muted context.VerticalScrollBar
+
+        projectTable.FullRowSelect <- false
+        projectTable.MultiSelect <- false
+        projectTable.Style.ExpandLastColumn <- false
+        projectTable.Style.InvertSelectedCellFirstCharacter <- false
+        projectTable.Style.ShowHorizontalHeaderOverline <- false
+        projectTable.Style.ShowHorizontalHeaderUnderline <- false
+        projectTable.Style.ShowHorizontalBottomLine <- false
+        projectTable.Style.ShowVerticalCellLines <- false
+        projectTable.Style.ShowVerticalHeaderLines <- false
+        projectTable.Style.ShowVerticalCellLineForFirstColumn <- false
+        projectTable.Style.ShowVerticalCellLineForLastColumn <- false
 
         packageList.RowRender.Add(fun args ->
             model.Packages
@@ -1257,6 +1425,10 @@ type ExplorerWindow
             updateContextText this.Viewport.Width
             setLayout this.Viewport.Width
             rendering <- wasRendering)
+
+        contextFrame.ViewportChanged.Add(fun _ ->
+            setLayout this.Viewport.Width
+            this.SetNeedsDraw())
 
         render initial
 

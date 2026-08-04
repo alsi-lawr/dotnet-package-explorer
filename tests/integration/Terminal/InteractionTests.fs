@@ -169,6 +169,20 @@ type InteractionTests() =
         |> should not' (contain (ConfirmPreview preview.Id))
 
     [<Fact>]
+    member _.``preview project table keeps the fixed tab navigation ownership``() =
+        let initial =
+            { model () with
+                Route = Content(OperationPreview(preview, Projects)) }
+
+        [ 126, 34; 90, 30 ]
+        |> List.iter (fun (width, height) ->
+            runAt width height initial [ Key.L.WithCtrl; Key.L ]
+            |> should equal [ SelectPreviewTab Dependencies ]
+
+            runAt width height initial [ Key.L.WithCtrl; Key.H ]
+            |> should equal [ SelectPreviewTab Summary ])
+
+    [<Fact>]
     member _.``targeting keys move to and select the next project``() =
         let initial =
             { model () with

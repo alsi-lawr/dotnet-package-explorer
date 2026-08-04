@@ -30,8 +30,21 @@ module internal Presentation =
     [<Literal>]
     let WideListPercentage = 65
 
+    [<Literal>]
+    let WideContextListPercentage = 45
+
     let width columns =
         if columns < NarrowBoundary then Narrow else Wide
+
+    let listPercentage (model: Model) =
+        let route =
+            match model.Route with
+            | Content value
+            | Failure(value, _) -> value
+
+        match route with
+        | PackageList -> WideListPercentage
+        | _ -> WideContextListPercentage
 
     let packageId (PackageId value) = value
 
@@ -85,10 +98,10 @@ module internal Presentation =
         | Updates -> "Available updates"
         | Consolidate -> "Version differences"
 
-    let private listContentWidth columns =
+    let private listContentWidth columns (model: Model) =
         match width columns with
         | Narrow -> max 20 (columns - 4)
-        | Wide -> max 20 (columns * WideListPercentage / 100 - 5)
+        | Wide -> max 20 (columns * listPercentage model / 100 - 5)
 
     let private listPending (model: Model) =
         if model.Pending.Preview.IsSome then
@@ -548,7 +561,7 @@ p preview
     let project columns (model: Model) =
         let contextTitle, context, actions, route = content model
         let active = modeName model.Mode
-        let contentWidth = listContentWidth columns
+        let contentWidth = listContentWidth columns model
         let layout = rowLayout contentWidth model
         let isPending = listPending model |> Option.isSome
         let notice = listNotice model
