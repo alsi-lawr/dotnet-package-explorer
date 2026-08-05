@@ -546,8 +546,8 @@ type AnsiDriverTests() =
             [ "Current actions"
               "Tab / Shift-Tab"
               "1-4"
-              "j/k or Down/Up"
-              "h/l or Left/Right"
+              "j/k or \u2193/\u2191"
+              "h/l or \u2190/\u2192"
               "Ctrl-h / Ctrl-l"
               "s"
               "/"
@@ -560,6 +560,16 @@ type AnsiDriverTests() =
               "q" ]
             |> List.iter (fun binding ->
                 help.Contains(binding, StringComparison.Ordinal) |> should equal true)
+
+            let helpLines = help.Split Environment.NewLine
+
+            let descriptionColumn (description: string) =
+                helpLines
+                |> Array.find (fun line -> line.Contains(description, StringComparison.Ordinal))
+                |> fun line -> line.IndexOf(description, StringComparison.Ordinal)
+
+            descriptionColumn "Move down / up"
+            |> should equal (descriptionColumn "Previous / next tab")
 
             help.Contains("Enter details") |> should equal true
             help.Contains("Direct.Package") |> should equal false)
@@ -656,7 +666,10 @@ type AnsiDriverTests() =
                 | Installed -> ()
 
                 if width = 126 then
-                    screen.Contains("Loading package details...", StringComparison.Ordinal)
+                    screen.Contains(
+                        "Press Enter to load package details.",
+                        StringComparison.Ordinal
+                    )
                     |> should equal true))
 
     [<Fact>]
@@ -1044,7 +1057,8 @@ type AnsiDriverTests() =
                 let screen = renderTextWithKeys width height failed [ Key.L.WithCtrl ]
 
                 screen.Contains(message) |> should equal true
-                screen.Contains("Esc dismiss | h/l tabs") |> should equal true
+                screen.Contains("Esc dismiss | j/k scroll | h/l tabs") |> should equal true
+
                 screen.Contains("Packages / Failure") |> should equal false
                 screen.Contains("Applying package changes") |> should equal false))
 
@@ -1159,6 +1173,16 @@ dotnet add package Direct.Package --source https://api.nuget.org/v3/index.json -
                     |> Option.ofObj
                     |> Option.defaultWith (fun () -> failwith "Search did not receive focus.")
 
+                application.Keyboard.RaiseKeyDownEvent Key.Enter |> ignore
+
+                let listFocusAfterSearch =
+                    window.MostFocused
+                    |> Option.ofObj
+                    |> Option.defaultWith (fun () ->
+                        failwith "Package list did not receive focus after search.")
+
+                Object.ReferenceEquals(searchFocus, listFocusAfterSearch) |> should equal false
+
                 application.Keyboard.RaiseKeyDownEvent Key.L.WithCtrl |> ignore
 
                 let contextFocus =
@@ -1186,6 +1210,8 @@ dotnet add package Direct.Package --source https://api.nuget.org/v3/index.json -
         application.Run window |> ignore
 
         messages |> Seq.toList |> should contain (ChangeMode Browse)
+        messages |> Seq.toList |> should contain (ChangeSearch("", false))
+        messages |> Seq.toList |> should contain SubmitSearch
         messages |> Seq.toList |> should contain Refresh
 
     [<Fact>]
@@ -1196,19 +1222,15 @@ dotnet add package Direct.Package --source https://api.nuget.org/v3/index.json -
         |> Option.ofObj
         |> Option.iter (fun driver -> driver.SetScreenSize(120, 35))
 
-        let longReadme =
-            [ 1..80 ]
-            |> List.map (fun line -> $"## Section {line}\n\nContent for section {line}.")
-            |> String.concat "\n\n"
+        let versions =
+            [ 1..80 ] |> List.map (fun version -> PackageVersion $"1.0.{version}")
+
+        let current = model ()
+        let details = current.Details[direct.Id]
 
         let initial =
-            { model () with
-                Route = Content(PackageReadme direct.Id)
-                Readmes =
-                    Map.ofList
-                        [ direct.Id,
-                          { Package = direct.Id
-                            CommonMark = longReadme } ] }
+            { current with
+                Details = current.Details.Add(direct.Id, { details with Versions = versions }) }
 
         use window = new ExplorerWindow(initial, ignore, application.RequestStop, Ansi16)
         use _keyboard = window.BindKeyboard application.Keyboard
@@ -1222,7 +1244,9 @@ dotnet add package Direct.Package --source https://api.nuget.org/v3/index.json -
                     |> Option.ofObj
                     |> Option.defaultWith (fun () -> failwith "Context did not receive focus.")
 
-                context.ScrollVertical 4 |> should equal true
+                [ Key.CursorDown; Key.J; Key.CursorDown; Key.J; Key.CursorUp; Key.K ]
+                |> List.iter (fun key -> application.Keyboard.RaiseKeyDownEvent key |> ignore)
+
                 let scrolled = context.Viewport.Y
                 scrolled |> should be (greaterThan 0)
 

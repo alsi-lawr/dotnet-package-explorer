@@ -291,7 +291,7 @@ module internal Presentation =
         function
         | PackageList -> "j/k move | Space select | Enter details | p preview | ? Help"
         | PackageDetails _
-        | PackageReadme _ -> "h/l tabs | C-h/C-l panes | p preview | Esc back | ? Help"
+        | PackageReadme _ -> "j/k scroll | h/l tabs | C-h/C-l panes | p preview | Esc back | ? Help"
         | PackageTargeting _ -> "j/k move | Space select | p preview | Esc back | ? Help"
         | OperationPreview _ -> "h/l tabs | Enter apply | Esc back | ? Help"
         | OperationConfirmation _
@@ -321,7 +321,15 @@ module internal Presentation =
 
     let private detailsMarkdown (model: Model) (package: PackageId) =
         match Map.tryFind package model.Details with
-        | None -> "Loading package details..."
+        | None when
+            model.Pending.Details.IsSome
+            && match model.Route with
+               | Content(PackageDetails loading) -> loading = package
+               | Content _
+               | Failure _ -> false
+            ->
+            "Loading package details..."
+        | None -> "Press Enter to load package details."
         | Some details ->
             let summary =
                 details.Package.Description

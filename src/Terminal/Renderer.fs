@@ -551,8 +551,8 @@ type ExplorerWindow
             + "\n\nNavigation\n"
             + "Tab / Shift-Tab  Next / previous mode\n"
             + "1-4              Browse / Installed / Updates / Consolidate\n"
-            + "j/k or Down/Up   Move down / up\n"
-            + "h/l or Left/Right  Previous / next tab\n"
+            + "j/k or \u2193/\u2191       Move down / up\n"
+            + "h/l or \u2190/\u2192       Previous / next tab\n"
             + "Ctrl-h / Ctrl-l  Previous / next pane\n\n"
             + "Packages\n"
             + "s                Sort\n"
@@ -968,6 +968,17 @@ type ExplorerWindow
         rendering <- false
         this.SetNeedsDraw()
 
+    let packageContextHasFocus () =
+        context.HasFocus
+        && match contentRoute () with
+           | PackageList -> model.ActivePackage.IsSome
+           | PackageDetails _
+           | PackageReadme _ -> true
+           | PackageTargeting _
+           | OperationPreview _
+           | OperationConfirmation _
+           | OperationProgress _ -> false
+
     let messageForMove direction =
         match contentRoute () with
         | PackageTargeting _ ->
@@ -993,6 +1004,8 @@ type ExplorerWindow
             renderSort ()
         else
             match contentRoute () with
+            | PackageList when direction > 0 && projection.ListIsInteractive ->
+                model.ActivePackage |> Option.iter (ShowReadme >> dispatch)
             | PackageDetails package when direction > 0 -> dispatch (ShowReadme package)
             | PackageReadme package when direction < 0 -> dispatch (ShowDetails package)
             | OperationPreview(_, tab) ->
@@ -1165,6 +1178,8 @@ type ExplorerWindow
         | NextMode -> dispatch (ChangeMode(cycle modeOrder model.Mode 1))
         | PreviousMode -> dispatch (ChangeMode(cycle modeOrder model.Mode -1))
         | SelectMode mode -> dispatch (ChangeMode mode)
+        | MoveRow direction when packageContextHasFocus () ->
+            context.ScrollVertical direction |> ignore
         | MoveRow direction -> messageForMove direction
         | MoveHorizontal direction -> moveHorizontal direction
         | MovePane direction ->
@@ -1207,6 +1222,7 @@ type ExplorerWindow
         | Activate when search.HasFocus ->
             dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
             dispatch SubmitSearch
+            packageList.SetFocus() |> ignore
         | Activate when source.HasFocus ->
             let value =
                 if String.IsNullOrWhiteSpace source.Text then
@@ -1216,6 +1232,7 @@ type ExplorerWindow
 
             dispatch (SelectSource value)
             dispatch SubmitSearch
+            packageList.SetFocus() |> ignore
         | Activate when prerelease.HasFocus -> prerelease.AdvanceCheckState() |> ignore
         | Activate ->
             match contentRoute () with
@@ -1437,12 +1454,14 @@ type ExplorerWindow
                         Some(PackageSource(source.Text.Trim()))
 
                 dispatch (SelectSource value)
-                dispatch SubmitSearch)
+                dispatch SubmitSearch
+                packageList.SetFocus() |> ignore)
 
         search.Accepting.Add(fun _ ->
             if not (backgroundInputBlocked ()) then
                 dispatch (ChangeSearch(search.Text, model.Query.IncludePrerelease))
-                dispatch SubmitSearch)
+                dispatch SubmitSearch
+                packageList.SetFocus() |> ignore)
 
         prerelease.ValueChanged.Add(fun args ->
             if not rendering && not (backgroundInputBlocked ()) then

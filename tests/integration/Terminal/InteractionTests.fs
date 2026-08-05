@@ -162,6 +162,28 @@ type InteractionTests() =
             |> should contain (ConfirmPreview preview.Id))
 
     [<Fact>]
+    member _.``preview without an active package is a no-op``() =
+        let unselected = { model () with ActivePackage = None }
+
+        run unselected [ Key.P ] |> should be Empty
+
+    [<Fact>]
+    member _.``details pane navigation accepts vim and arrow tab keys``() =
+        let details = model ()
+
+        let readme =
+            { details with
+                Route = Content(PackageReadme direct.Id) }
+
+        [ Key.L; Key.CursorRight ]
+        |> List.iter (fun key ->
+            run details [ Key.L.WithCtrl; key ] |> should equal [ ShowReadme direct.Id ])
+
+        [ Key.H; Key.CursorLeft ]
+        |> List.iter (fun key ->
+            run readme [ Key.L.WithCtrl; key ] |> should equal [ ShowDetails direct.Id ])
+
+    [<Fact>]
     member _.``preview confirmation cancels through Escape without applying``() =
         let initial =
             { model () with

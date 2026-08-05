@@ -133,6 +133,21 @@ type PresentationTests() =
         actual.Rows[1].Contains("Central") |> should equal true
 
     [<Fact>]
+    member _.``unloaded package details only report loading while their request is active``() =
+        let unloaded = { model () with Details = Map.empty }
+
+        let selected = Presentation.project 126 unloaded
+        selected.Context |> should equal "Press Enter to load package details."
+
+        let loading =
+            { unloaded with
+                Route = Content(PackageDetails direct.Id)
+                Pending.Details = Some(RequestToken 40L) }
+            |> Presentation.project 126
+
+        loading.Context |> should equal "Loading package details..."
+
+    [<Fact>]
     member _.``empty package modes expose only their available recovery actions``() =
         let emptyModes =
             [ Browse, "Tab/1-4 modes | / search | ? Help", "No packages found"
